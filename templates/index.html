@@ -2,133 +2,293 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
     <title>Hand Gesture to Words</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
 
-<div class="page-shell">
+    <div class="container">
 
-    <header class="topbar">
-        <div>
-            <div class="brand">GESTURE VOICE</div>
-            <div class="subtitle">AI Hand Gesture to Words &amp; Speech</div>
-        </div>
-        <div class="top-status" id="topStatus">READY</div>
-    </header>
+        <header>
+            <h1>Hand Gesture to Words</h1>
+            <p>Convert hand gestures into words and sentences</p>
+        </header>
 
-    <main>
-        <section class="hero">
-            <div>
-                <span class="eyebrow">REAL-TIME COMPUTER VISION</span>
-                <h1>Hand Gesture Recognition</h1>
-                <p>Show a trained hand gesture, hold it for 0.3 seconds, and build a sentence in real time.</p>
+
+        <!-- =========================
+             CAMERA SECTION
+        ========================== -->
+
+        <section class="camera-section">
+
+            <div class="camera-container">
+
+                <video id="video"
+                       autoplay
+                       playsinline>
+                </video>
+
+                <canvas id="overlay"></canvas>
+
             </div>
+
+
+            <div class="camera-controls">
+
+                <button id="startBtn"
+                        class="primary-btn">
+                    Start Camera
+                </button>
+
+                <button id="stopBtn"
+                        class="secondary-btn">
+                    Stop Camera
+                </button>
+
+            </div>
+
         </section>
 
-        <section class="dashboard">
 
-            <div class="camera-card card">
-                <div class="card-header">
-                    <span>LIVE CAMERA</span>
-                    <span id="holdDisplay">Hold: 0%</span>
+        <!-- =========================
+             PREDICTION SECTION
+        ========================== -->
+
+        <section class="prediction-section">
+
+            <div class="prediction-card">
+
+                <h2>Detected Gesture</h2>
+
+                <div id="detectedGesture"
+                     class="gesture-display">
+                    —
                 </div>
 
-                <div class="camera-wrap" id="cameraWrap">
-                    <video id="video" autoplay playsinline muted></video>
-                    <canvas id="overlay"></canvas>
-                    <div class="camera-message" id="cameraMessage">
-                        <strong>Camera permission required</strong>
-                        <span>Allow camera access to start recognition.</span>
-                        <button id="startCameraBtn">START CAMERA</button>
+
+                <div class="confidence-container">
+
+                    <div class="confidence-label">
+
+                        <span>
+                            Confidence
+                        </span>
+
+                        <span id="confidence">
+                            0%
+                        </span>
+
                     </div>
-                </div>
 
-                <div class="camera-footer">
-                    <span id="cameraStatus">Camera not started</span>
-                    <button class="small-btn" id="stopCameraBtn">STOP</button>
-                </div>
-            </div>
 
-            <aside class="side-card card">
-                <div class="panel-title">DETECTED GESTURE</div>
-                <div class="gesture-value" id="gesture">NO HAND</div>
+                    <div class="confidence-bar">
 
-                <div class="metric">
-                    <div class="metric-row">
-                        <span>Confidence</span>
-                        <strong id="confidence">0%</strong>
+                        <div id="confidenceFill"
+                             class="confidence-fill">
+                        </div>
+
                     </div>
-                    <div class="bar"><div class="bar-fill" id="confidenceBar"></div></div>
+
                 </div>
 
-                <div class="metric">
-                    <div class="metric-row">
-                        <span>Hold Progress</span>
-                        <strong id="holdMetric">0%</strong>
-                    </div>
-                    <div class="bar"><div class="bar-fill" id="holdBar"></div></div>
+
+                <div class="status-container">
+
+                    <span class="status-title">
+                        Status:
+                    </span>
+
+                    <span id="status"
+                          class="status">
+                        Loading...
+                    </span>
+
                 </div>
 
-                <div class="status-box" id="status">Starting...</div>
-
-                <div class="legend">
-                    <div><span class="dot green"></span> Valid gesture</div>
-                    <div><span class="dot yellow"></span> Uncertain</div>
-                    <div><span class="dot red"></span> No hand</div>
-                </div>
-            </aside>
+            </div>
 
         </section>
 
-        <section class="sentence-card card">
-            <div class="card-header sentence-header">
-                <span>SENTENCE</span>
-                <span class="counter"><span id="wordCount">0</span> items</span>
+
+        <!-- =========================
+             SENTENCE SECTION
+        ========================== -->
+
+        <section class="sentence-section">
+
+            <h2>Sentence</h2>
+
+
+            <div id="sentence"
+                 class="sentence-box">
+
+                Your sentence will appear here...
+
             </div>
 
-            <div class="sentence-box" id="sentence"></div>
 
-            <div class="controls">
-                <button class="primary" id="addWordBtn">ADD WORD</button>
-                <button id="spaceBtn">SPACE</button>
-                <button id="speakBtn">SPEAK</button>
-                <button id="deleteBtn">DELETE</button>
-                <button id="clearBtn">CLEAR</button>
-                <button class="finish" id="finishBtn">FINISH &amp; SPEAK</button>
+            <div class="sentence-controls">
+
+                <button id="addWordBtn"
+                        class="primary-btn">
+                    Add Word
+                </button>
+
+
+                <button id="spaceBtn"
+                        class="secondary-btn">
+                    Space
+                </button>
+
+
+                <button id="speakBtn"
+                        class="secondary-btn">
+                    Speak
+                </button>
+
+
+                <button id="deleteBtn"
+                        class="warning-btn">
+                    Delete
+                </button>
+
+
+                <button id="clearBtn"
+                        class="danger-btn">
+                    Clear
+                </button>
+
+
+                <button id="finishBtn"
+                        class="finish-btn">
+                    Finish &amp; Speak
+                </button>
+
             </div>
+
         </section>
 
-        <section class="info-grid">
-            <div class="info-card card">
-                <h3>Supported Gestures</h3>
-                <div class="gesture-list">
-                    <span>HELLO</span>
-                    <span>STOP</span>
-                    <span>GOOD</span>
-                    <span>YES</span>
-                    <span>PEACE</span>
-                    <span>LOVE</span>
-                    <span>HELP</span>
-                    <span>THANKS</span>
-                    <span>COME</span>
-                    <span>BYE</span>
+
+        <!-- =========================
+             AVAILABLE GESTURES
+        ========================== -->
+
+        <section class="gestures-section">
+
+            <h2>Available Gestures</h2>
+
+
+            <div class="gesture-list">
+
+                <div class="gesture-item">
+                    HELLO
                 </div>
+
+                <div class="gesture-item">
+                    STOP
+                </div>
+
+                <div class="gesture-item">
+                    GOOD
+                </div>
+
+                <div class="gesture-item">
+                    YES
+                </div>
+
+                <div class="gesture-item">
+                    PEACE
+                </div>
+
+                <div class="gesture-item">
+                    LOVE
+                </div>
+
+                <div class="gesture-item">
+                    HELP
+                </div>
+
+                <div class="gesture-item">
+                    THANKS
+                </div>
+
+                <div class="gesture-item">
+                    COME
+                </div>
+
+                <div class="gesture-item">
+                    BYE
+                </div>
+
             </div>
 
-            <div class="info-card card">
-                <h3>How it works</h3>
-                <p>MediaPipe detects 21 hand landmarks. Your trained Random Forest model classifies the gesture. A 55% confidence threshold and temporal smoothing help reduce flicker before a word is added.</p>
-            </div>
         </section>
-    </main>
 
-    <footer>
-        Hand Gesture Recognition • OpenCV • MediaPipe • Random Forest
-    </footer>
-</div>
 
-<script src="{{ url_for('static', filename='script.js') }}"></script>
+        <!-- =========================
+             SETTINGS
+        ========================== -->
+
+        <section class="info-section">
+
+            <div class="info-card">
+
+                <h3>Recognition Settings</h3>
+
+                <p>
+                    Confidence threshold:
+                    <strong>55%</strong>
+                </p>
+
+                <p>
+                    Gesture hold time:
+                    <strong>0.3 seconds</strong>
+                </p>
+
+                <p>
+                    Prediction smoothing:
+                    <strong>Enabled</strong>
+                </p>
+
+                <p>
+                    Recognized gestures:
+                    <strong>10</strong>
+                </p>
+
+            </div>
+
+        </section>
+
+
+        <!-- =========================
+             FOOTER
+        ========================== -->
+
+        <footer>
+
+            <p>
+                Hand Gesture Recognition System
+            </p>
+
+        </footer>
+
+    </div>
+
+
+    <!-- =========================
+         JAVASCRIPT MODULE
+    ========================== -->
+
+    <script type="module"
+            src="{{ url_for('static', filename='script.js') }}">
+    </script>
+
 </body>
 </html>

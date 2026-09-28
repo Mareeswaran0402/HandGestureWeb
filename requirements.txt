@@ -1,6 +1,4 @@
 Flask
-opencv-python
-mediapipe
 numpy
 joblib
 scikit-learn

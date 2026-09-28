@@ -1,415 +1,479 @@
-:root {
-    --bg: #07111f;
-    --panel: #0d1a2b;
-    --panel-2: #101f32;
-    --border: #22364e;
-    --text: #f5f7fb;
-    --muted: #93a4b8;
-    --green: #35e27f;
-    --yellow: #f4ca5d;
-    --red: #ef6670;
-    --blue: #4f8cff;
-}
+/* =========================================================
+   GLOBAL
+========================================================= */
 
 * {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
 body {
-    margin: 0;
-    min-height: 100vh;
     font-family: Arial, Helvetica, sans-serif;
-    color: var(--text);
-    background:
-        radial-gradient(circle at 15% 0%, #122645 0%, transparent 35%),
-        radial-gradient(circle at 90% 20%, #102a3b 0%, transparent 30%),
-        var(--bg);
+    background: #07111f;
+    color: #f4f7fb;
+    min-height: 100vh;
 }
 
-button {
-    font: inherit;
-}
-
-.page-shell {
-    width: min(1280px, calc(100% - 32px));
+.container {
+    width: min(1200px, 94%);
     margin: 0 auto;
-    padding: 22px 0 30px;
+    padding: 35px 0 50px;
 }
 
-.topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 2px 24px;
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
 }
 
-.brand {
-    font-weight: 800;
-    letter-spacing: 2px;
-    font-size: 15px;
+header h1 {
+    font-size: 42px;
+    margin-bottom: 10px;
 }
 
-.subtitle {
-    color: var(--muted);
-    margin-top: 4px;
-    font-size: 13px;
+header p {
+    color: #a9bdd5;
+    font-size: 17px;
 }
 
-.top-status {
-    border: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.04);
-    padding: 8px 13px;
-    border-radius: 999px;
-    color: #b9c6d6;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 1px;
+
+/* =========================================================
+   SECTIONS
+========================================================= */
+
+section {
+    margin-bottom: 28px;
 }
 
-.hero {
-    margin-bottom: 22px;
+.camera-section,
+.prediction-card,
+.sentence-section,
+.gestures-section,
+.info-card {
+    background: #0e1d2e;
+    border: 1px solid #223954;
+    border-radius: 16px;
 }
 
-.eyebrow {
-    color: #8ea7c5;
-    font-size: 12px;
-    letter-spacing: 1.5px;
-    font-weight: 800;
+
+/* =========================================================
+   CAMERA
+========================================================= */
+
+.camera-section {
+    padding: 22px;
 }
 
-.hero h1 {
-    margin: 8px 0;
-    font-size: clamp(28px, 4vw, 44px);
-}
-
-.hero p {
-    margin: 0;
-    max-width: 800px;
-    color: var(--muted);
-    font-size: 15px;
-    line-height: 1.6;
-}
-
-.card {
-    background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    box-shadow: 0 18px 60px rgba(0,0,0,0.23);
-}
-
-.dashboard {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 18px;
-}
-
-.camera-card {
-    overflow: hidden;
-}
-
-.card-header {
-    display: flex;
-    justify-content: space-between;
-    padding: 17px 18px;
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 1.2px;
-    color: #b8c7d8;
-}
-
-.camera-wrap {
+.camera-container {
     position: relative;
-    aspect-ratio: 4 / 3;
-    background: #02070e;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+
+    background: #000;
+
+    border-radius: 12px;
     overflow: hidden;
+
+    aspect-ratio: 4 / 3;
 }
+
+
+/*
+    Video and canvas are mirrored together.
+
+    This keeps the green landmarks aligned
+    with the displayed webcam image.
+*/
 
 #video,
 #overlay {
     position: absolute;
-    inset: 0;
+
+    top: 0;
+    left: 0;
+
     width: 100%;
     height: 100%;
-    object-fit: contain;
+
+    object-fit: cover;
+
     transform: scaleX(-1);
 }
 
 #video {
-    display: block;
     background: #000;
 }
 
 #overlay {
-    z-index: 3;
+    z-index: 2;
     pointer-events: none;
 }
 
-.camera-message {
-    position: absolute;
-    inset: 0;
-    z-index: 5;
+
+/* =========================================================
+   CAMERA BUTTONS
+========================================================= */
+
+.camera-controls {
     display: flex;
-    flex-direction: column;
+    justify-content: center;
+    gap: 12px;
+
+    margin-top: 18px;
+
+    flex-wrap: wrap;
+}
+
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+button {
+    border: none;
+
+    border-radius: 8px;
+
+    padding: 12px 20px;
+
+    font-size: 15px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition:
+        transform 0.15s ease,
+        opacity 0.15s ease;
+}
+
+button:hover {
+    transform: translateY(-1px);
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.primary-btn {
+    background: #2f80ed;
+    color: white;
+}
+
+.secondary-btn {
+    background: #34495e;
+    color: white;
+}
+
+.warning-btn {
+    background: #b7791f;
+    color: white;
+}
+
+.danger-btn {
+    background: #c0392b;
+    color: white;
+}
+
+.finish-btn {
+    background: #16a085;
+    color: white;
+}
+
+
+/* =========================================================
+   PREDICTION
+========================================================= */
+
+.prediction-section {
+    width: 100%;
+}
+
+.prediction-card {
+    padding: 25px;
+}
+
+.prediction-card h2,
+.sentence-section h2,
+.gestures-section h2 {
+    margin-bottom: 18px;
+    font-size: 24px;
+}
+
+
+/* =========================================================
+   GESTURE DISPLAY
+========================================================= */
+
+.gesture-display {
+    min-height: 75px;
+
+    display: flex;
     align-items: center;
     justify-content: center;
-    gap: 9px;
-    text-align: center;
-    background: rgba(3,10,18,0.72);
-    backdrop-filter: blur(3px);
-}
 
-.camera-message strong {
-    font-size: 18px;
-}
+    background: #081523;
 
-.camera-message span {
-    color: var(--muted);
-    font-size: 13px;
-}
+    border: 1px solid #29435f;
 
-.camera-message button {
-    margin-top: 8px;
-}
-
-.camera-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    color: var(--muted);
-    font-size: 12px;
-}
-
-.small-btn {
-    padding: 7px 12px;
-}
-
-.side-card {
-    padding: 24px 22px;
-}
-
-.panel-title {
-    color: #91a3b7;
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 1.3px;
-}
-
-.gesture-value {
-    margin: 15px 0 28px;
-    min-height: 47px;
-    color: var(--green);
-    font-size: 34px;
-    font-weight: 800;
-}
-
-.metric {
-    margin: 18px 0;
-}
-
-.metric-row {
-    display: flex;
-    justify-content: space-between;
-    color: var(--muted);
-    font-size: 13px;
-    margin-bottom: 8px;
-}
-
-.metric-row strong {
-    color: var(--text);
-}
-
-.bar {
-    height: 8px;
-    border-radius: 999px;
-    background: #18283c;
-    overflow: hidden;
-}
-
-.bar-fill {
-    width: 0%;
-    height: 100%;
-    border-radius: inherit;
-    background: var(--blue);
-    transition: width 80ms linear;
-}
-
-#holdBar {
-    background: var(--green);
-}
-
-.status-box {
-    margin-top: 24px;
-    padding: 12px 13px;
-    border-radius: 11px;
-    border: 1px solid var(--border);
-    background: rgba(255,255,255,0.03);
-    font-size: 13px;
-}
-
-.legend {
-    display: grid;
-    gap: 9px;
-    margin-top: 24px;
-    color: var(--muted);
-    font-size: 12px;
-}
-
-.dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
-.dot.green { background: var(--green); }
-.dot.yellow { background: var(--yellow); }
-.dot.red { background: var(--red); }
-
-.sentence-card {
-    margin-top: 18px;
-    padding-bottom: 18px;
-}
-
-.sentence-header {
-    padding-bottom: 12px;
-}
-
-.counter {
-    color: #73869d;
-    font-size: 11px;
-    letter-spacing: 0;
-}
-
-.sentence-box {
-    margin: 0 18px;
-    min-height: 96px;
     border-radius: 12px;
-    border: 1px solid var(--border);
-    background: #07111d;
-    padding: 18px;
-    color: #f7fafc;
-    font-size: 24px;
-    font-weight: 700;
-    line-height: 1.5;
-    word-break: break-word;
+
+    font-size: 38px;
+
+    font-weight: 800;
+
+    letter-spacing: 1px;
+
+    color: #40e88b;
+
+    margin-bottom: 25px;
 }
 
-.controls {
+
+/* =========================================================
+   CONFIDENCE
+========================================================= */
+
+.confidence-container {
+    margin-bottom: 20px;
+}
+
+.confidence-label {
     display: flex;
-    flex-wrap: wrap;
-    gap: 9px;
-    padding: 16px 18px 0;
-}
+    justify-content: space-between;
 
-.controls button {
-    border: 1px solid #31475e;
-    border-radius: 9px;
-    padding: 11px 16px;
-    background: #102035;
-    color: #e6edf5;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 700;
-}
+    margin-bottom: 8px;
 
-.controls button:hover {
-    filter: brightness(1.12);
-}
+    color: #b7c7d9;
 
-.controls .primary {
-    background: #163057;
-    border-color: #3a67a4;
-}
-
-.controls .finish {
-    margin-left: auto;
-    background: #123524;
-    border-color: #256845;
-}
-
-#startCameraBtn {
-    padding: 11px 18px;
-    border: 1px solid #416fb0;
-    border-radius: 8px;
-    background: #17345c;
-    color: white;
-    cursor: pointer;
-    font-weight: 700;
-}
-
-.info-grid {
-    display: grid;
-    grid-template-columns: 1.1fr 0.9fr;
-    gap: 18px;
-    margin-top: 18px;
-}
-
-.info-card {
-    padding: 21px;
-}
-
-.info-card h3 {
-    margin: 0 0 13px;
     font-size: 15px;
 }
 
-.info-card p {
-    margin: 0;
-    color: var(--muted);
+.confidence-bar {
+    width: 100%;
+    height: 14px;
+
+    background: #18293b;
+
+    border-radius: 20px;
+
+    overflow: hidden;
+}
+
+.confidence-fill {
+    height: 100%;
+
+    width: 0%;
+
+    background: #40e88b;
+
+    border-radius: 20px;
+
+    transition: width 0.15s ease;
+}
+
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+.status-container {
+    display: flex;
+    gap: 8px;
+
+    background: #0a1726;
+
+    border: 1px solid #21384f;
+
+    border-radius: 10px;
+
+    padding: 13px;
+
+    color: #dbe7f4;
+}
+
+.status-title {
+    font-weight: 700;
+}
+
+.status {
+    color: #8fb0ce;
+}
+
+
+/* =========================================================
+   SENTENCE
+========================================================= */
+
+.sentence-section {
+    padding: 25px;
+}
+
+.sentence-box {
+    width: 100%;
+
+    min-height: 110px;
+
+    padding: 20px;
+
+    background: #07111f;
+
+    border: 1px solid #29435f;
+
+    border-radius: 12px;
+
+    font-size: 22px;
+
     line-height: 1.6;
-    font-size: 13px;
+
+    color: #ffffff;
+
+    word-break: break-word;
+
+    margin-bottom: 20px;
+}
+
+.sentence-controls {
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 10px;
+}
+
+
+/* =========================================================
+   GESTURE LIST
+========================================================= */
+
+.gestures-section {
+    padding: 25px;
 }
 
 .gesture-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+    display: grid;
+
+    grid-template-columns:
+        repeat(auto-fit, minmax(140px, 1fr));
+
+    gap: 12px;
 }
 
-.gesture-list span {
-    border: 1px solid var(--border);
-    background: rgba(255,255,255,0.025);
-    border-radius: 999px;
-    padding: 7px 10px;
-    font-size: 11px;
-    color: #b9c8d8;
+.gesture-item {
+    background: #13263b;
+
+    border: 1px solid #29435f;
+
+    border-radius: 10px;
+
+    padding: 15px;
+
+    text-align: center;
+
+    font-weight: 700;
+
+    color: #cfe0f2;
 }
+
+
+/* =========================================================
+   INFORMATION
+========================================================= */
+
+.info-section {
+    width: 100%;
+}
+
+.info-card {
+    padding: 25px;
+}
+
+.info-card h3 {
+    margin-bottom: 15px;
+
+    font-size: 21px;
+}
+
+.info-card p {
+    color: #aebfd2;
+
+    margin-bottom: 9px;
+
+    line-height: 1.5;
+}
+
+.info-card strong {
+    color: #ffffff;
+}
+
+
+/* =========================================================
+   FOOTER
+========================================================= */
 
 footer {
-    margin-top: 22px;
-    color: #63758a;
     text-align: center;
-    font-size: 11px;
+
+    margin-top: 35px;
+
+    color: #7187a0;
+
+    font-size: 14px;
 }
 
-@media (max-width: 980px) {
-    .dashboard,
-    .info-grid {
-        grid-template-columns: 1fr;
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 700px) {
+
+    .container {
+        width: 94%;
+        padding-top: 20px;
     }
 
-    .controls .finish {
-        margin-left: 0;
-    }
-}
-
-@media (max-width: 640px) {
-    .page-shell {
-        width: min(100% - 18px, 1280px);
-        padding-top: 12px;
-    }
-
-    .hero h1 {
+    header h1 {
         font-size: 30px;
     }
 
-    .sentence-box {
-        font-size: 19px;
+    header p {
+        font-size: 14px;
     }
 
-    .controls button {
-        flex: 1 1 140px;
+    .camera-section,
+    .prediction-card,
+    .sentence-section,
+    .gestures-section,
+    .info-card {
+        padding: 16px;
+    }
+
+    .gesture-display {
+        font-size: 28px;
+    }
+
+    .sentence-box {
+        font-size: 18px;
+    }
+
+    button {
+        width: 100%;
+    }
+
+    .camera-controls {
+        flex-direction: column;
+    }
+
+    .sentence-controls {
+        flex-direction: column;
     }
 }

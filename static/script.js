@@ -1,660 +1,1461 @@
-const video = document.getElementById("video");
-const canvas = document.getElementById("overlay");
-const ctx = canvas.getContext("2d");
-
-const gestureElement = document.getElementById("gesture");
-const confidenceElement = document.getElementById("confidence");
-const confidenceBar = document.getElementById("confidenceBar");
-const holdElement = document.getElementById("holdMetric");
-const holdBar = document.getElementById("holdBar");
-const holdDisplay = document.getElementById("holdDisplay");
-const sentenceElement = document.getElementById("sentence");
-const wordCountElement = document.getElementById("wordCount");
-const statusElement = document.getElementById("status");
-const topStatus = document.getElementById("topStatus");
-const cameraStatus = document.getElementById("cameraStatus");
-const cameraMessage = document.getElementById("cameraMessage");
-const startCameraBtn = document.getElementById("startCameraBtn");
-const stopCameraBtn = document.getElementById("stopCameraBtn");
+import {
+    FilesetResolver,
+    HandLandmarker
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
 
 
-// =========================================================
+// ============================================================
 // SETTINGS
-// =========================================================
+// ============================================================
 
-const HOLD_TIME = 300;              // 0.3 seconds
-const SMOOTHING_SIZE = 5;           // recent predictions
-const POLL_INTERVAL = 110;          // ms between backend requests
+const GESTURES = [
+    "HELLO",
+    "STOP",
+    "GOOD",
+    "YES",
+    "PEACE",
+    "LOVE",
+    "HELP",
+    "THANKS",
+    "COME",
+    "BYE"
+];
+
+const CONFIDENCE_THRESHOLD = 55; // 55%
+const MARGIN_THRESHOLD = 8;      // 8 percentage points
+
+const HOLD_TIME = 300;            // 0.3 seconds
+const STABLE_FRAMES = 4;
+
+const EMA_ALPHA = 0.45;
+const HISTORY_SIZE = 6;
+
+const SWITCH_MARGIN = 10;
+
+const SEND_INTERVAL = 100;        // Send landmarks every 100 ms
 
 
-// =========================================================
-// STATE
-// =========================================================
+// ============================================================
+// HTML ELEMENTS
+// ============================================================
+
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+
+const detectedGesture =
+    document.getElementById("detectedGesture");
+
+const confidenceText =
+    document.getElementById("confidence");
+
+const confidenceFill =
+    document.getElementById("confidenceFill");
+
+const statusText =
+    document.getElementById("status");
+
+const sentenceBox =
+    document.getElementById("sentence");
+
+const addWordBtn =
+    document.getElementById("addWordBtn");
+
+const spaceBtn =
+    document.getElementById("spaceBtn");
+
+const speakBtn =
+    document.getElementById("speakBtn");
+
+const deleteBtn =
+    document.getElementById("deleteBtn");
+
+const clearBtn =
+    document.getElementById("clearBtn");
+
+const finishBtn =
+    document.getElementById("finishBtn");
+
+const ctx = overlay.getContext("2d");
+
+
+// ============================================================
+// GLOBAL VARIABLES
+// ============================================================
+
+let handLandmarker = null;
 
 let stream = null;
-let running = false;
-let predictionBusy = false;
-let lastPredictionTime = 0;
 
-let sentence = [];
+let cameraRunning = false;
 
-let currentGesture = "NO HAND";
-let currentConfidence = 0;
+let animationId = null;
 
-let previousGesture = "";
-let gestureStartTime = 0;
-let gestureAlreadyAdded = false;
+let lastVideoTime = -1;
 
-let predictionHistory = [];
+let lastSendTime = 0;
 
 
-// =========================================================
-// START CAMERA
-// =========================================================
+// Sentence
+let sentence = "";
 
-async function startCamera() {
 
-    if (running) {
-        return;
-    }
+// Prediction state
+let currentGesture = null;
+
+let candidateGesture = null;
+
+let candidateStartTime = 0;
+
+let stableFrameCount = 0;
+
+let insertedGesture = null;
+
+
+// Smoothing
+let lastProbabilities = null;
+
+let probabilityHistory = [];
+
+
+// ============================================================
+// LOAD MEDIAPIPE HAND LANDMARKER
+// ============================================================
+
+async function loadHandLandmarker() {
 
     try {
 
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: "user"
-            },
-            audio: false
-        });
+        statusText.textContent =
+            "Loading hand detection model...";
+
+
+        const vision =
+            await FilesetResolver.forVisionTasks(
+                "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm"
+            );
+
+
+        handLandmarker =
+            await HandLandmarker.createFromOptions(
+                vision,
+                {
+                    baseOptions: {
+
+                        modelAssetPath:
+                            "/static/models/hand_landmarker.task",
+
+                        delegate: "GPU"
+                    },
+
+                    runningMode: "VIDEO",
+
+                    numHands: 1,
+
+                    minHandDetectionConfidence: 0.5,
+
+                    minHandPresenceConfidence: 0.5,
+
+                    minTrackingConfidence: 0.5
+                }
+            );
+
+
+        statusText.textContent =
+            "Model loaded. Click Start Camera.";
+
+        console.log(
+            "MediaPipe HandLandmarker loaded successfully."
+        );
+
+    } catch (error) {
+
+        console.error(
+            "MediaPipe loading error:",
+            error
+        );
+
+        statusText.textContent =
+            "Failed to load hand detection model.";
+    }
+}
+
+
+// ============================================================
+// START CAMERA
+// ============================================================
+
+async function startCamera() {
+
+    if (!handLandmarker) {
+
+        statusText.textContent =
+            "Please wait for the model to load.";
+
+        return;
+    }
+
+
+    try {
+
+        stream =
+            await navigator.mediaDevices.getUserMedia(
+                {
+                    video: {
+                        width: {
+                            ideal: 640
+                        },
+
+                        height: {
+                            ideal: 480
+                        },
+
+                        facingMode: "user"
+                    },
+
+                    audio: false
+                }
+            );
+
 
         video.srcObject = stream;
 
         await video.play();
 
-        running = true;
 
-        cameraMessage.style.display = "none";
+        cameraRunning = true;
 
-        cameraStatus.textContent = "Camera running";
-        statusElement.textContent = "Show your hand";
-        topStatus.textContent = "LIVE";
+        lastVideoTime = -1;
 
-        requestAnimationFrame(cameraLoop);
+        lastSendTime = 0;
+
+
+        resetPredictionState();
+
+
+        statusText.textContent =
+            "Camera running. Show a gesture.";
+
+
+        startBtn.disabled = true;
+
+        stopBtn.disabled = false;
+
+
+        resizeCanvas();
+
+
+        predictLoop();
 
     } catch (error) {
 
-        console.error("Camera error:", error);
+        console.error(
+            "Camera error:",
+            error
+        );
 
-        cameraMessage.style.display = "flex";
-
-        cameraStatus.textContent = "Camera access failed";
-        statusElement.textContent = "Allow camera access and try again";
-        topStatus.textContent = "CAMERA OFF";
-
+        statusText.textContent =
+            "Camera permission denied or camera unavailable.";
     }
 }
 
 
-// =========================================================
+// ============================================================
 // STOP CAMERA
-// =========================================================
+// ============================================================
 
 function stopCamera() {
 
-    running = false;
+    cameraRunning = false;
 
-    predictionBusy = false;
+
+    if (animationId) {
+
+        cancelAnimationFrame(animationId);
+
+        animationId = null;
+    }
+
 
     if (stream) {
 
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach(
+            track => track.stop()
+        );
 
         stream = null;
     }
 
+
     video.srcObject = null;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    resetRecognitionState();
+    clearCanvas();
 
-    cameraMessage.style.display = "flex";
 
-    cameraStatus.textContent = "Camera stopped";
-    statusElement.textContent = "Camera stopped";
-    topStatus.textContent = "READY";
+    detectedGesture.textContent = "—";
 
+    confidenceText.textContent = "0%";
+
+    confidenceFill.style.width = "0%";
+
+
+    statusText.textContent =
+        "Camera stopped.";
+
+
+    startBtn.disabled = false;
+
+    stopBtn.disabled = true;
+
+
+    resetPredictionState();
 }
 
 
-// =========================================================
-// RESET RECOGNITION STATE
-// =========================================================
+// ============================================================
+// RESIZE CANVAS
+// ============================================================
 
-function resetRecognitionState() {
-
-    currentGesture = "NO HAND";
-    currentConfidence = 0;
-
-    previousGesture = "";
-    gestureStartTime = 0;
-    gestureAlreadyAdded = false;
-
-    predictionHistory = [];
-
-    updatePredictionUI();
-    setHoldProgress(0);
-}
-
-
-// =========================================================
-// CAMERA LOOP
-// =========================================================
-
-function cameraLoop(timestamp) {
-
-    if (!running) {
-        return;
-    }
+function resizeCanvas() {
 
     if (
-        video.readyState >= 2 &&
-        !predictionBusy &&
-        timestamp - lastPredictionTime >= POLL_INTERVAL
+        !video.videoWidth ||
+        !video.videoHeight
     ) {
-
-        lastPredictionTime = timestamp;
-        predictionBusy = true;
-
-        predictFrame().finally(() => {
-            predictionBusy = false;
-        });
-
-    }
-
-    requestAnimationFrame(cameraLoop);
-}
-
-
-// =========================================================
-// SEND FRAME TO PYTHON
-// =========================================================
-
-async function predictFrame() {
-
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-
-    if (!width || !height) {
         return;
     }
 
-    const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = width;
-    tempCanvas.height = height;
 
-    const tempCtx = tempCanvas.getContext("2d");
+    overlay.width =
+        video.videoWidth;
 
-    // Send the ORIGINAL frame to Python.
-    // The visible video and overlay are mirrored together in CSS.
-    tempCtx.drawImage(video, 0, 0, width, height);
-
-    const imageData = tempCanvas.toDataURL("image/jpeg", 0.72);
-
-    try {
-
-        const response = await fetch("/predict", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ image: imageData })
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.success) {
-            throw new Error(result.error || "Prediction failed");
-        }
-
-        if (result.gesture === "NO HAND") {
-
-            predictionHistory = [];
-            resetRecognitionState();
-            drawLandmarks([]);
-            return;
-        }
-
-        // Browser-side smoothing of stable labels.
-        predictionHistory.push(result.gesture);
-
-        if (predictionHistory.length > SMOOTHING_SIZE) {
-            predictionHistory.shift();
-        }
-
-        const stableGesture = getMostCommon(predictionHistory);
-
-        currentGesture = stableGesture;
-        currentConfidence = Number(result.confidence || 0);
-
-        updatePredictionUI();
-        drawLandmarks(result.landmarks || []);
-        handleHold();
-
-    } catch (error) {
-
-        console.error("Prediction error:", error);
-
-        statusElement.textContent = "Server prediction error";
-        topStatus.textContent = "ERROR";
-    }
+    overlay.height =
+        video.videoHeight;
 }
 
 
-// =========================================================
-// MOST COMMON PREDICTION
-// =========================================================
+// ============================================================
+// CLEAR CANVAS
+// ============================================================
 
-function getMostCommon(items) {
+function clearCanvas() {
 
-    if (!items.length) {
-        return "NO HAND";
-    }
-
-    const counts = {};
-
-    for (const item of items) {
-        counts[item] = (counts[item] || 0) + 1;
-    }
-
-    let best = items[0];
-    let bestCount = counts[best];
-
-    for (const item of Object.keys(counts)) {
-
-        if (counts[item] > bestCount) {
-            best = item;
-            bestCount = counts[item];
-        }
-    }
-
-    return best;
+    ctx.clearRect(
+        0,
+        0,
+        overlay.width,
+        overlay.height
+    );
 }
 
 
-// =========================================================
-// DRAW LANDMARKS
-// =========================================================
+// ============================================================
+// MEDIAPIPE HAND CONNECTIONS
+// ============================================================
 
-function drawLandmarks(landmarks) {
+const HAND_CONNECTIONS = [
 
-    if (video.videoWidth && video.videoHeight) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-    }
+    // Thumb
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 4],
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Index finger
+    [0, 5],
+    [5, 6],
+    [6, 7],
+    [7, 8],
 
-    if (!landmarks || landmarks.length !== 21) {
+    // Middle finger
+    [5, 9],
+    [9, 10],
+    [10, 11],
+    [11, 12],
+
+    // Ring finger
+    [9, 13],
+    [13, 14],
+    [14, 15],
+    [15, 16],
+
+    // Pinky
+    [13, 17],
+    [17, 18],
+    [18, 19],
+    [19, 20],
+
+    // Palm
+    [0, 17]
+];
+
+
+// ============================================================
+// DRAW 21 HAND LANDMARKS
+// ============================================================
+
+function drawHand(landmarks) {
+
+    clearCanvas();
+
+
+    if (!landmarks) {
         return;
     }
 
-    const connections = [
-        [0,1], [1,2], [2,3], [3,4],
-        [0,5], [5,6], [6,7], [7,8],
-        [0,9], [9,10], [10,11], [11,12],
-        [0,13], [13,14], [14,15], [15,16],
-        [0,17], [17,18], [18,19], [19,20],
-        [5,9], [9,13], [13,17]
-    ];
+
+    const width = overlay.width;
+
+    const height = overlay.height;
+
+
+    // --------------------------------------------------------
+    // Draw green connecting lines
+    // --------------------------------------------------------
+
+    ctx.lineWidth = 3;
 
     ctx.strokeStyle = "lime";
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
 
-    for (const [start, end] of connections) {
 
-        const x1 = landmarks[start].x * canvas.width;
-        const y1 = landmarks[start].y * canvas.height;
-        const x2 = landmarks[end].x * canvas.width;
-        const y2 = landmarks[end].y * canvas.height;
+    for (const [start, end] of HAND_CONNECTIONS) {
+
+        const p1 =
+            landmarks[start];
+
+        const p2 =
+            landmarks[end];
+
 
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
+
+
+        ctx.moveTo(
+            p1.x * width,
+            p1.y * height
+        );
+
+
+        ctx.lineTo(
+            p2.x * width,
+            p2.y * height
+        );
+
+
         ctx.stroke();
     }
 
-    ctx.fillStyle = "lime";
 
-    for (const point of landmarks) {
+    // --------------------------------------------------------
+    // Draw 21 green landmark points
+    // --------------------------------------------------------
 
-        const x = point.x * canvas.width;
-        const y = point.y * canvas.height;
+    for (const landmark of landmarks) {
+
+        const x =
+            landmark.x * width;
+
+        const y =
+            landmark.y * height;
+
 
         ctx.beginPath();
-        ctx.arc(x, y, 6, 0, Math.PI * 2);
+
+
+        ctx.arc(
+            x,
+            y,
+            5,
+            0,
+            Math.PI * 2
+        );
+
+
+        ctx.fillStyle = "lime";
+
         ctx.fill();
+
+
+        ctx.strokeStyle = "black";
+
+        ctx.lineWidth = 1;
+
+        ctx.stroke();
     }
 }
 
 
-// =========================================================
-// HOLD LOGIC
-// =========================================================
+// ============================================================
+// MAIN PREDICTION LOOP
+// ============================================================
 
-function handleHold() {
+async function predictLoop() {
+
+    if (!cameraRunning) {
+        return;
+    }
+
 
     if (
-        currentGesture === "UNCERTAIN" ||
-        currentGesture === "NO HAND"
+        video.readyState >= 2 &&
+        video.currentTime !== lastVideoTime
     ) {
 
-        previousGesture = "";
-        gestureStartTime = 0;
-        gestureAlreadyAdded = false;
+        lastVideoTime =
+            video.currentTime;
 
-        setHoldProgress(0);
 
-        statusElement.textContent =
-            currentGesture === "UNCERTAIN"
-                ? "Gesture not confident enough"
-                : "Show your hand";
+        try {
+
+            const result =
+                handLandmarker.detectForVideo(
+                    video,
+                    performance.now()
+                );
+
+
+            // ------------------------------------------------
+            // HAND FOUND
+            // ------------------------------------------------
+
+            if (
+                result.landmarks &&
+                result.landmarks.length > 0
+            ) {
+
+                const landmarks =
+                    result.landmarks[0];
+
+
+                drawHand(landmarks);
+
+
+                const now =
+                    performance.now();
+
+
+                if (
+                    now - lastSendTime >=
+                    SEND_INTERVAL
+                ) {
+
+                    lastSendTime = now;
+
+                    await sendLandmarks(
+                        landmarks
+                    );
+                }
+
+
+            }
+
+            // ------------------------------------------------
+            // NO HAND
+            // ------------------------------------------------
+
+            else {
+
+                clearCanvas();
+
+
+                resetGestureTracking();
+
+                resetInsertedGesture();
+
+
+                detectedGesture.textContent =
+                    "—";
+
+
+                confidenceText.textContent =
+                    "0%";
+
+
+                confidenceFill.style.width =
+                    "0%";
+
+
+                statusText.textContent =
+                    "No hand detected.";
+            }
+
+
+        } catch (error) {
+
+            console.error(
+                "Prediction loop error:",
+                error
+            );
+        }
+    }
+
+
+    animationId =
+        requestAnimationFrame(
+            predictLoop
+        );
+}
+
+
+// ============================================================
+// SEND 21 LANDMARKS TO FLASK
+// ============================================================
+
+async function sendLandmarks(landmarks) {
+
+    try {
+
+        const response =
+            await fetch(
+                "/predict-landmarks",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify(
+                        {
+                            landmarks:
+                                landmarks
+                        }
+                    )
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                `Server returned ${response.status}`
+            );
+        }
+
+
+        const data =
+            await response.json();
+
+
+        if (!data.success) {
+            return;
+        }
+
+
+        processPrediction(data);
+
+    } catch (error) {
+
+        console.error(
+            "Server prediction error:",
+            error
+        );
+    }
+}
+
+
+// ============================================================
+// PROCESS PREDICTION
+// ============================================================
+
+function processPrediction(data) {
+
+    const probabilities =
+        Array.isArray(data.probabilities)
+            ? data.probabilities.map(Number)
+            : null;
+
+
+    if (
+        !probabilities ||
+        probabilities.length !==
+            GESTURES.length
+    ) {
 
         return;
     }
 
-    if (currentGesture !== previousGesture) {
 
-        previousGesture = currentGesture;
-        gestureStartTime = Date.now();
-        gestureAlreadyAdded = false;
-        setHoldProgress(0);
+    // --------------------------------------------------------
+    // EMA SMOOTHING
+    // --------------------------------------------------------
 
-        statusElement.textContent =
-            "Hold " + currentGesture;
-    }
+    if (!lastProbabilities) {
 
-    const heldTime = Date.now() - gestureStartTime;
+        lastProbabilities =
+            [...probabilities];
 
-    const progress = Math.min(
-        (heldTime / HOLD_TIME) * 100,
-        100
-    );
-
-    setHoldProgress(progress);
-
-    if (
-        heldTime >= HOLD_TIME &&
-        !gestureAlreadyAdded
-    ) {
-
-        sentence.push(currentGesture);
-
-        gestureAlreadyAdded = true;
-
-        updateSentence();
-
-        statusElement.textContent =
-            "Added: " + currentGesture;
-
-    }
-}
-
-
-// =========================================================
-// HOLD UI
-// =========================================================
-
-function setHoldProgress(value) {
-
-    const rounded = Math.max(
-        0,
-        Math.min(100, value)
-    );
-
-    holdElement.textContent =
-        `${rounded.toFixed(0)}%`;
-
-    holdDisplay.textContent =
-        `Hold: ${rounded.toFixed(0)}%`;
-
-    holdBar.style.width =
-        `${rounded}%`;
-}
-
-
-// =========================================================
-// PREDICTION UI
-// =========================================================
-
-function updatePredictionUI() {
-
-    gestureElement.textContent = currentGesture;
-
-    confidenceElement.textContent =
-        `${currentConfidence.toFixed(1)}%`;
-
-    confidenceBar.style.width =
-        `${Math.min(currentConfidence, 100)}%`;
-
-    if (currentGesture === "UNCERTAIN") {
-        gestureElement.style.color = "#f4ca5d";
-        topStatus.textContent = "UNCERTAIN";
-    } else if (currentGesture === "NO HAND") {
-        gestureElement.style.color = "#ef6670";
-        topStatus.textContent = "READY";
     } else {
-        gestureElement.style.color = "#35e27f";
-        topStatus.textContent = "DETECTING";
-    }
-}
 
+        for (
+            let i = 0;
+            i < probabilities.length;
+            i++
+        ) {
 
-// =========================================================
-// SENTENCE FUNCTIONS
-// =========================================================
-
-function getSentenceText() {
-
-    let text = "";
-
-    for (const item of sentence) {
-
-        if (item === "|") {
-            text += " ";
-            continue;
+            lastProbabilities[i] =
+                (
+                    EMA_ALPHA *
+                    probabilities[i]
+                ) +
+                (
+                    (1 - EMA_ALPHA) *
+                    lastProbabilities[i]
+                );
         }
-
-        if (text.length && !text.endsWith(" ")) {
-            text += " ";
-        }
-
-        text += item;
     }
 
-    return text.trim();
-}
 
+    // --------------------------------------------------------
+    // SAVE HISTORY
+    // --------------------------------------------------------
 
-function updateSentence() {
+    probabilityHistory.push(
+        [...lastProbabilities]
+    );
 
-    sentenceElement.textContent =
-        getSentenceText();
-
-    wordCountElement.textContent =
-        sentence.length;
-}
-
-
-function addCurrentWord() {
 
     if (
-        currentGesture === "NO HAND" ||
-        currentGesture === "UNCERTAIN"
+        probabilityHistory.length >
+        HISTORY_SIZE
     ) {
-        statusElement.textContent = "No valid gesture";
+
+        probabilityHistory.shift();
+    }
+
+
+    // --------------------------------------------------------
+    // WEIGHTED SMOOTHING
+    // --------------------------------------------------------
+
+    const smoothed =
+        getWeightedProbabilities();
+
+
+    // --------------------------------------------------------
+    // FIND BEST PREDICTION
+    // --------------------------------------------------------
+
+    const sortedIndices =
+        [...Array(GESTURES.length).keys()]
+            .sort(
+                (a, b) =>
+                    smoothed[b] -
+                    smoothed[a]
+            );
+
+
+    const bestIndex =
+        sortedIndices[0];
+
+    const secondIndex =
+        sortedIndices[1];
+
+
+    const bestProbability =
+        smoothed[bestIndex] * 100;
+
+    const secondProbability =
+        smoothed[secondIndex] * 100;
+
+
+    const margin =
+        bestProbability -
+        secondProbability;
+
+
+    const gesture =
+        GESTURES[bestIndex];
+
+
+    // --------------------------------------------------------
+    // DISPLAY PREDICTION
+    // --------------------------------------------------------
+
+    detectedGesture.textContent =
+        gesture;
+
+
+    confidenceText.textContent =
+        `${bestProbability.toFixed(1)}%`;
+
+
+    confidenceFill.style.width =
+        `${Math.min(bestProbability, 100)}%`;
+
+
+    // --------------------------------------------------------
+    // CONFIDENCE CHECK
+    // --------------------------------------------------------
+
+    if (
+        bestProbability <
+        CONFIDENCE_THRESHOLD
+    ) {
+
+        statusText.textContent =
+            "Low confidence.";
+
+
+        resetGestureTracking();
+
         return;
     }
 
-    sentence.push(currentGesture);
 
-    updateSentence();
-
-    gestureAlreadyAdded = true;
-
-    statusElement.textContent =
-        "Added: " + currentGesture;
-}
-
-
-function addSpace() {
+    // --------------------------------------------------------
+    // MARGIN CHECK
+    // --------------------------------------------------------
 
     if (
-        sentence.length &&
-        sentence[sentence.length - 1] !== "|"
+        margin <
+        MARGIN_THRESHOLD
     ) {
-        sentence.push("|");
-        updateSentence();
-    }
-}
+
+        statusText.textContent =
+            "Prediction uncertain.";
 
 
-function deleteLast() {
+        resetGestureTracking();
 
-    if (!sentence.length) {
-        statusElement.textContent = "Sentence is empty";
         return;
     }
 
-    sentence.pop();
-    updateSentence();
-    statusElement.textContent = "Last item deleted";
+
+    statusText.textContent =
+        `${gesture} detected — stabilizing...`;
+
+
+    // --------------------------------------------------------
+    // STABILITY
+    // --------------------------------------------------------
+
+    updateStableGesture(
+        gesture,
+        bestProbability,
+        margin
+    );
 }
 
 
-function clearSentence() {
+// ============================================================
+// WEIGHTED PROBABILITY HISTORY
+// ============================================================
 
-    sentence = [];
-    updateSentence();
-    statusElement.textContent = "Sentence cleared";
+function getWeightedProbabilities() {
+
+    const result =
+        new Array(
+            GESTURES.length
+        ).fill(0);
+
+
+    if (
+        probabilityHistory.length === 0
+    ) {
+
+        return result;
+    }
+
+
+    let totalWeight = 0;
+
+
+    for (
+        let i = 0;
+        i < probabilityHistory.length;
+        i++
+    ) {
+
+        // Recent frames receive higher weight
+        const weight = i + 1;
+
+
+        totalWeight += weight;
+
+
+        for (
+            let j = 0;
+            j < GESTURES.length;
+            j++
+        ) {
+
+            result[j] +=
+                probabilityHistory[i][j] *
+                weight;
+        }
+    }
+
+
+    for (
+        let i = 0;
+        i < result.length;
+        i++
+    ) {
+
+        result[i] /=
+            totalWeight;
+    }
+
+
+    return result;
 }
 
 
-// =========================================================
-// SPEECH
-// =========================================================
+// ============================================================
+// STABLE GESTURE DETECTION
+// ============================================================
+
+function updateStableGesture(
+    gesture,
+    confidence,
+    margin
+) {
+
+    // --------------------------------------------------------
+    // Same candidate
+    // --------------------------------------------------------
+
+    if (
+        candidateGesture === gesture
+    ) {
+
+        stableFrameCount++;
+
+    }
+
+
+    // --------------------------------------------------------
+    // New candidate
+    // --------------------------------------------------------
+
+    else {
+
+        candidateGesture =
+            gesture;
+
+        candidateStartTime =
+            performance.now();
+
+        stableFrameCount = 1;
+    }
+
+
+    // --------------------------------------------------------
+    // HYSTERESIS
+    // Prevent fast switching
+    // --------------------------------------------------------
+
+    if (
+        currentGesture &&
+        currentGesture !== gesture
+    ) {
+
+        const currentIndex =
+            GESTURES.indexOf(
+                currentGesture
+            );
+
+
+        const newIndex =
+            GESTURES.indexOf(
+                gesture
+            );
+
+
+        let currentProbability = 0;
+
+        let newProbability =
+            confidence;
+
+
+        if (
+            lastProbabilities &&
+            currentIndex >= 0
+        ) {
+
+            currentProbability =
+                lastProbabilities[
+                    currentIndex
+                ] * 100;
+        }
+
+
+        if (
+            lastProbabilities &&
+            newIndex >= 0
+        ) {
+
+            newProbability =
+                lastProbabilities[
+                    newIndex
+                ] * 100;
+        }
+
+
+        const difference =
+            newProbability -
+            currentProbability;
+
+
+        if (
+            difference <
+            SWITCH_MARGIN &&
+            currentProbability >=
+                CONFIDENCE_THRESHOLD
+        ) {
+
+            statusText.textContent =
+                `${currentGesture} maintained`;
+
+            return;
+        }
+    }
+
+
+    // --------------------------------------------------------
+    // HOLD TIME
+    // --------------------------------------------------------
+
+    const heldTime =
+        performance.now() -
+        candidateStartTime;
+
+
+    // --------------------------------------------------------
+    // ACCEPT
+    // --------------------------------------------------------
+
+    if (
+        stableFrameCount >=
+            STABLE_FRAMES &&
+        heldTime >=
+            HOLD_TIME
+    ) {
+
+        if (
+            insertedGesture !==
+            gesture
+        ) {
+
+            addGestureToSentence(
+                gesture
+            );
+
+            insertedGesture =
+                gesture;
+        }
+
+
+        currentGesture =
+            gesture;
+
+
+        statusText.textContent =
+            `${gesture} added`;
+
+    }
+
+    // --------------------------------------------------------
+    // STILL HOLDING
+    // --------------------------------------------------------
+
+    else {
+
+        const remaining =
+            Math.max(
+                0,
+                HOLD_TIME - heldTime
+            );
+
+
+        statusText.textContent =
+            `${gesture} — hold ${(remaining / 1000).toFixed(1)}s`;
+    }
+}
+
+
+// ============================================================
+// RESET GESTURE TRACKING
+// ============================================================
+
+function resetGestureTracking() {
+
+    candidateGesture = null;
+
+    candidateStartTime = 0;
+
+    stableFrameCount = 0;
+}
+
+
+// ============================================================
+// RESET INSERTED GESTURE
+// ============================================================
+
+function resetInsertedGesture() {
+
+    insertedGesture = null;
+
+    currentGesture = null;
+}
+
+
+// ============================================================
+// RESET ALL PREDICTION STATE
+// ============================================================
+
+function resetPredictionState() {
+
+    currentGesture = null;
+
+    candidateGesture = null;
+
+    candidateStartTime = 0;
+
+    stableFrameCount = 0;
+
+    insertedGesture = null;
+
+    lastProbabilities = null;
+
+    probabilityHistory = [];
+}
+
+
+// ============================================================
+// ADD GESTURE TO SENTENCE
+// ============================================================
+
+function addGestureToSentence(
+    gesture
+) {
+
+    if (!gesture) {
+        return;
+    }
+
+
+    if (
+        sentence.length > 0 &&
+        !sentence.endsWith(" ")
+    ) {
+
+        sentence += " ";
+    }
+
+
+    sentence += gesture;
+
+
+    updateSentenceDisplay();
+}
+
+
+// ============================================================
+// UPDATE SENTENCE DISPLAY
+// ============================================================
+
+function updateSentenceDisplay() {
+
+    if (
+        sentence.length === 0
+    ) {
+
+        sentenceBox.textContent =
+            "Your sentence will appear here...";
+
+    } else {
+
+        sentenceBox.textContent =
+            sentence;
+    }
+}
+
+
+// ============================================================
+// ADD WORD BUTTON
+// ============================================================
+
+addWordBtn.addEventListener(
+    "click",
+    () => {
+
+        const gesture =
+            detectedGesture.textContent
+                .trim();
+
+
+        if (
+            gesture &&
+            GESTURES.includes(
+                gesture
+            )
+        ) {
+
+            addGestureToSentence(
+                gesture
+            );
+
+
+            // Prevent immediate
+            // automatic duplicate
+            insertedGesture =
+                gesture;
+
+
+            statusText.textContent =
+                `${gesture} added manually.`;
+        }
+    }
+);
+
+
+// ============================================================
+// SPACE BUTTON
+// ============================================================
+
+spaceBtn.addEventListener(
+    "click",
+    () => {
+
+        if (
+            sentence.length > 0 &&
+            !sentence.endsWith(" ")
+        ) {
+
+            sentence += " ";
+
+            updateSentenceDisplay();
+        }
+    }
+);
+
+
+// ============================================================
+// SPEAK BUTTON
+// ============================================================
+
+speakBtn.addEventListener(
+    "click",
+    () => {
+
+        speakSentence();
+    }
+);
+
+
+// ============================================================
+// BROWSER TEXT-TO-SPEECH
+// ============================================================
 
 function speakSentence() {
 
-    const text = getSentenceText();
+    const text =
+        sentence.trim();
+
 
     if (!text) {
-        statusElement.textContent = "Nothing to speak";
+
+        statusText.textContent =
+            "Nothing to speak.";
+
         return;
     }
 
-    if (!("speechSynthesis" in window)) {
-        statusElement.textContent = "Speech is not supported in this browser";
+
+    if (
+        !("speechSynthesis" in window)
+    ) {
+
+        statusText.textContent =
+            "Speech synthesis is not supported by this browser.";
+
         return;
     }
 
+
+    // Stop previous speech
     window.speechSynthesis.cancel();
 
-    const utterance =
-        new SpeechSynthesisUtterance(text);
 
-    utterance.rate = 1.0;
+    const utterance =
+        new SpeechSynthesisUtterance(
+            text
+        );
+
+
+    utterance.rate = 0.9;
+
     utterance.pitch = 1.0;
+
     utterance.volume = 1.0;
 
+
     utterance.onstart = () => {
-        statusElement.textContent = "Speaking...";
-        topStatus.textContent = "SPEAKING";
+
+        statusText.textContent =
+            "Speaking...";
     };
+
 
     utterance.onend = () => {
-        statusElement.textContent = "Ready";
-        topStatus.textContent = "LIVE";
+
+        statusText.textContent =
+            "Speech finished.";
     };
 
-    utterance.onerror = (event) => {
-        console.error("Speech error:", event);
-        statusElement.textContent = "Speech error";
-        topStatus.textContent = "ERROR";
+
+    utterance.onerror = () => {
+
+        statusText.textContent =
+            "Speech error.";
     };
 
-    window.speechSynthesis.speak(utterance);
+
+    window.speechSynthesis.speak(
+        utterance
+    );
 }
 
 
-function finishSentence() {
+// ============================================================
+// DELETE LAST WORD
+// ============================================================
 
-    if (!getSentenceText()) {
-        statusElement.textContent = "Sentence is empty";
-        return;
+deleteBtn.addEventListener(
+    "click",
+    () => {
+
+        sentence =
+            sentence.trimEnd();
+
+
+        const lastSpace =
+            sentence.lastIndexOf(" ");
+
+
+        if (
+            lastSpace === -1
+        ) {
+
+            sentence = "";
+
+        } else {
+
+            sentence =
+                sentence.substring(
+                    0,
+                    lastSpace
+                );
+        }
+
+
+        updateSentenceDisplay();
+
+
+        statusText.textContent =
+            "Last word deleted.";
     }
-
-    speakSentence();
-}
+);
 
 
-// =========================================================
-// BUTTONS
-// =========================================================
+// ============================================================
+// CLEAR SENTENCE
+// ============================================================
 
-startCameraBtn.addEventListener(
+clearBtn.addEventListener(
+    "click",
+    () => {
+
+        sentence = "";
+
+
+        updateSentenceDisplay();
+
+
+        statusText.textContent =
+            "Sentence cleared.";
+    }
+);
+
+
+// ============================================================
+// FINISH & SPEAK
+// ============================================================
+
+finishBtn.addEventListener(
+    "click",
+    () => {
+
+        const text =
+            sentence.trim();
+
+
+        if (!text) {
+
+            statusText.textContent =
+                "Sentence is empty.";
+
+            return;
+        }
+
+
+        speakSentence();
+
+
+        statusText.textContent =
+            "Sentence finished.";
+    }
+);
+
+
+// ============================================================
+// BUTTON EVENTS
+// ============================================================
+
+startBtn.addEventListener(
     "click",
     startCamera
 );
 
-stopCameraBtn.addEventListener(
+
+stopBtn.addEventListener(
     "click",
     stopCamera
 );
 
-document.getElementById("addWordBtn").addEventListener(
-    "click",
-    addCurrentWord
-);
 
-document.getElementById("spaceBtn").addEventListener(
-    "click",
-    addSpace
-);
+// ============================================================
+// WINDOW RESIZE
+// ============================================================
 
-document.getElementById("speakBtn").addEventListener(
-    "click",
-    speakSentence
-);
-
-document.getElementById("deleteBtn").addEventListener(
-    "click",
-    deleteLast
-);
-
-document.getElementById("clearBtn").addEventListener(
-    "click",
-    clearSentence
-);
-
-document.getElementById("finishBtn").addEventListener(
-    "click",
-    finishSentence
+window.addEventListener(
+    "resize",
+    resizeCanvas
 );
 
 
-// =========================================================
-// INITIAL UI
-// =========================================================
+// ============================================================
+// INITIAL STATE
+// ============================================================
 
-updateSentence();
-setHoldProgress(0);
-updatePredictionUI();
+startBtn.disabled = false;
+
+stopBtn.disabled = true;
+
+updateSentenceDisplay();
+
+statusText.textContent =
+    "Loading hand detection model...";
+
+
+// ============================================================
+// LOAD MODEL
+// ============================================================
+
+loadHandLandmarker();
