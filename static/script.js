@@ -21,18 +21,29 @@ const GESTURES = [
     "BYE"
 ];
 
-const CONFIDENCE_THRESHOLD = 55; // 55%
-const MARGIN_THRESHOLD = 8;      // 8 percentage points
+// Minimum prediction confidence
+const CONFIDENCE_THRESHOLD = 55;
 
-const HOLD_TIME = 300;            // 0.3 seconds
-const STABLE_FRAMES = 4;
+// Difference between best and second-best prediction
+const MARGIN_THRESHOLD = 8;
 
+// Gesture must be held for 0.3 seconds
+const HOLD_TIME = 300;
+
+// Number of stable predictions required
+const STABLE_FRAMES = 2;
+
+// EMA smoothing factor
 const EMA_ALPHA = 0.45;
+
+// Number of recent predictions to keep
 const HISTORY_SIZE = 6;
 
+// Prevent rapid switching between gestures
 const SWITCH_MARGIN = 10;
 
-const SEND_INTERVAL = 100;        // Send landmarks every 100 ms
+// Send landmarks to Flask every 300 ms
+const SEND_INTERVAL = 300;
 
 
 // ============================================================
@@ -97,12 +108,22 @@ let lastVideoTime = -1;
 
 let lastSendTime = 0;
 
+// IMPORTANT:
+// Prevent multiple requests to Render at the same time.
+let predictionInFlight = false;
 
-// Sentence
+
+// ============================================================
+// SENTENCE STATE
+// ============================================================
+
 let sentence = "";
 
 
-// Prediction state
+// ============================================================
+// GESTURE STATE
+// ============================================================
+
 let currentGesture = null;
 
 let candidateGesture = null;
@@ -111,17 +132,22 @@ let candidateStartTime = 0;
 
 let stableFrameCount = 0;
 
+// Prevent the same gesture from being inserted repeatedly
+// while the hand remains in the same position.
 let insertedGesture = null;
 
 
-// Smoothing
+// ============================================================
+// SMOOTHING STATE
+// ============================================================
+
 let lastProbabilities = null;
 
 let probabilityHistory = [];
 
 
 // ============================================================
-// LOAD MEDIAPIPE HAND LANDMARKER
+// MEDIAPIPE MODEL
 // ============================================================
 
 async function loadHandLandmarker() {
@@ -132,21 +158,26 @@ async function loadHandLandmarker() {
             "Loading hand detection model...";
 
 
+        // Load MediaPipe WASM files
         const vision =
             await FilesetResolver.forVisionTasks(
                 "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm"
             );
 
 
+        // Create hand landmarker
         handLandmarker =
             await HandLandmarker.createFromOptions(
                 vision,
                 {
                     baseOptions: {
 
+                        // IMPORTANT:
+                        // Flask static folder
                         modelAssetPath:
                             "/static/models/hand_landmarker.task",
 
+                        // Use browser GPU
                         delegate: "GPU"
                     },
 
@@ -200,6 +231,7 @@ async function startCamera() {
 
     try {
 
+        // Ask browser for webcam
         stream =
             await navigator.mediaDevices.getUserMedia(
                 {
@@ -231,6 +263,8 @@ async function startCamera() {
 
         lastSendTime = 0;
 
+        predictionInFlight = false;
+
 
         resetPredictionState();
 
@@ -247,6 +281,7 @@ async function startCamera() {
         resizeCanvas();
 
 
+        // Start prediction loop
         predictLoop();
 
     } catch (error) {
@@ -311,12 +346,15 @@ function stopCamera() {
     stopBtn.disabled = true;
 
 
+    predictionInFlight = false;
+
+
     resetPredictionState();
 }
 
 
 // ============================================================
-// RESIZE CANVAS
+// RESIZE OVERLAY
 // ============================================================
 
 function resizeCanvas() {
@@ -338,7 +376,7 @@ function resizeCanvas() {
 
 
 // ============================================================
-// CLEAR CANVAS
+// CLEAR OVERLAY
 // ============================================================
 
 function clearCanvas() {
@@ -353,7 +391,7 @@ function clearCanvas() {
 
 
 // ============================================================
-// MEDIAPIPE HAND CONNECTIONS
+// HAND CONNECTIONS
 // ============================================================
 
 const HAND_CONNECTIONS = [
@@ -364,19 +402,19 @@ const HAND_CONNECTIONS = [
     [2, 3],
     [3, 4],
 
-    // Index finger
+    // Index
     [0, 5],
     [5, 6],
     [6, 7],
     [7, 8],
 
-    // Middle finger
+    // Middle
     [5, 9],
     [9, 10],
     [10, 11],
     [11, 12],
 
-    // Ring finger
+    // Ring
     [9, 13],
     [13, 14],
     [14, 15],
@@ -394,7 +432,7 @@ const HAND_CONNECTIONS = [
 
 
 // ============================================================
-// DRAW 21 HAND LANDMARKS
+// DRAW 21 LANDMARKS
 // ============================================================
 
 function drawHand(landmarks) {
@@ -413,15 +451,18 @@ function drawHand(landmarks) {
 
 
     // --------------------------------------------------------
-    // Draw green connecting lines
+    // GREEN CONNECTION LINES
     // --------------------------------------------------------
-
-    ctx.lineWidth = 3;
 
     ctx.strokeStyle = "lime";
 
+    ctx.lineWidth = 3;
 
-    for (const [start, end] of HAND_CONNECTIONS) {
+
+    for (
+        const [start, end]
+        of HAND_CONNECTIONS
+    ) {
 
         const p1 =
             landmarks[start];
@@ -450,10 +491,13 @@ function drawHand(landmarks) {
 
 
     // --------------------------------------------------------
-    // Draw 21 green landmark points
+    // GREEN LANDMARK POINTS
     // --------------------------------------------------------
 
-    for (const landmark of landmarks) {
+    for (
+        const landmark
+        of landmarks
+    ) {
 
         const x =
             landmark.x * width;
@@ -489,10 +533,10 @@ function drawHand(landmarks) {
 
 
 // ============================================================
-// MAIN PREDICTION LOOP
+// MAIN CAMERA/PREDICTION LOOP
 // ============================================================
 
-async function predictLoop() {
+function predictLoop() {
 
     if (!cameraRunning) {
         return;
@@ -510,6 +554,7 @@ async function predictLoop() {
 
         try {
 
+            // Detect hand in browser
             const result =
                 handLandmarker.detectForVideo(
                     video,
@@ -530,6 +575,7 @@ async function predictLoop() {
                     result.landmarks[0];
 
 
+                // Draw green landmarks
                 drawHand(landmarks);
 
 
@@ -537,23 +583,40 @@ async function predictLoop() {
                     performance.now();
 
 
+                // ------------------------------------------------
+                // SEND ONLY IF:
+                //
+                // 1. 300 ms passed
+                // 2. Previous request finished
+                // ------------------------------------------------
+
                 if (
                     now - lastSendTime >=
-                    SEND_INTERVAL
+                        SEND_INTERVAL &&
+                    !predictionInFlight
                 ) {
 
                     lastSendTime = now;
 
-                    await sendLandmarks(
-                        landmarks
-                    );
-                }
+                    predictionInFlight = true;
 
+
+                    // IMPORTANT:
+                    // Do NOT await here.
+                    // This keeps the camera loop smooth.
+                    sendLandmarks(
+                        landmarks
+                    ).finally(() => {
+
+                        predictionInFlight =
+                            false;
+                    });
+                }
 
             }
 
             // ------------------------------------------------
-            // NO HAND
+            // NO HAND FOUND
             // ------------------------------------------------
 
             else {
@@ -561,6 +624,8 @@ async function predictLoop() {
                 clearCanvas();
 
 
+                // Reset gesture state so the same
+                // gesture can be detected again.
                 resetGestureTracking();
 
                 resetInsertedGesture();
@@ -593,6 +658,7 @@ async function predictLoop() {
     }
 
 
+    // Continue camera loop
     animationId =
         requestAnimationFrame(
             predictLoop
@@ -601,7 +667,7 @@ async function predictLoop() {
 
 
 // ============================================================
-// SEND 21 LANDMARKS TO FLASK
+// SEND LANDMARKS TO FLASK
 // ============================================================
 
 async function sendLandmarks(landmarks) {
@@ -618,6 +684,8 @@ async function sendLandmarks(landmarks) {
                         "Content-Type":
                             "application/json"
                     },
+
+                    cache: "no-store",
 
                     body: JSON.stringify(
                         {
@@ -642,6 +710,12 @@ async function sendLandmarks(landmarks) {
 
 
         if (!data.success) {
+
+            console.error(
+                "Server prediction failed:",
+                data.error
+            );
+
             return;
         }
 
@@ -659,22 +733,30 @@ async function sendLandmarks(landmarks) {
 
 
 // ============================================================
-// PROCESS PREDICTION
+// PROCESS MODEL PREDICTION
 // ============================================================
 
 function processPrediction(data) {
 
     const probabilities =
-        Array.isArray(data.probabilities)
+        Array.isArray(
+            data.probabilities
+        )
             ? data.probabilities.map(Number)
             : null;
 
 
+    // Verify 10 probabilities
     if (
         !probabilities ||
         probabilities.length !==
             GESTURES.length
     ) {
+
+        console.error(
+            "Invalid probability array:",
+            probabilities
+        );
 
         return;
     }
@@ -711,7 +793,7 @@ function processPrediction(data) {
 
 
     // --------------------------------------------------------
-    // SAVE HISTORY
+    // STORE RECENT HISTORY
     // --------------------------------------------------------
 
     probabilityHistory.push(
@@ -737,7 +819,7 @@ function processPrediction(data) {
 
 
     // --------------------------------------------------------
-    // FIND BEST PREDICTION
+    // SORT GESTURES BY PROBABILITY
     // --------------------------------------------------------
 
     const sortedIndices =
@@ -752,12 +834,14 @@ function processPrediction(data) {
     const bestIndex =
         sortedIndices[0];
 
+
     const secondIndex =
         sortedIndices[1];
 
 
     const bestProbability =
         smoothed[bestIndex] * 100;
+
 
     const secondProbability =
         smoothed[secondIndex] * 100;
@@ -773,7 +857,7 @@ function processPrediction(data) {
 
 
     // --------------------------------------------------------
-    // DISPLAY PREDICTION
+    // UPDATE DISPLAY
     // --------------------------------------------------------
 
     detectedGesture.textContent =
@@ -826,24 +910,19 @@ function processPrediction(data) {
     }
 
 
-    statusText.textContent =
-        `${gesture} detected — stabilizing...`;
-
-
     // --------------------------------------------------------
-    // STABILITY
+    // STABLE GESTURE
     // --------------------------------------------------------
 
     updateStableGesture(
         gesture,
-        bestProbability,
-        margin
+        bestProbability
     );
 }
 
 
 // ============================================================
-// WEIGHTED PROBABILITY HISTORY
+// WEIGHTED PROBABILITY SMOOTHING
 // ============================================================
 
 function getWeightedProbabilities() {
@@ -871,8 +950,9 @@ function getWeightedProbabilities() {
         i++
     ) {
 
-        // Recent frames receive higher weight
-        const weight = i + 1;
+        // Newer frames have greater weight
+        const weight =
+            i + 1;
 
 
         totalWeight += weight;
@@ -891,6 +971,7 @@ function getWeightedProbabilities() {
     }
 
 
+    // Normalize
     for (
         let i = 0;
         i < result.length;
@@ -907,30 +988,29 @@ function getWeightedProbabilities() {
 
 
 // ============================================================
-// STABLE GESTURE DETECTION
+// STABLE GESTURE + HOLD TIME + HYSTERESIS
 // ============================================================
 
 function updateStableGesture(
     gesture,
-    confidence,
-    margin
+    confidence
 ) {
 
     // --------------------------------------------------------
-    // Same candidate
+    // SAME CANDIDATE
     // --------------------------------------------------------
 
     if (
-        candidateGesture === gesture
+        candidateGesture ===
+        gesture
     ) {
 
         stableFrameCount++;
-
     }
 
 
     // --------------------------------------------------------
-    // New candidate
+    // NEW CANDIDATE
     // --------------------------------------------------------
 
     else {
@@ -947,7 +1027,6 @@ function updateStableGesture(
 
     // --------------------------------------------------------
     // HYSTERESIS
-    // Prevent fast switching
     // --------------------------------------------------------
 
     if (
@@ -1002,9 +1081,10 @@ function updateStableGesture(
             currentProbability;
 
 
+        // Don't switch too easily
         if (
             difference <
-            SWITCH_MARGIN &&
+                SWITCH_MARGIN &&
             currentProbability >=
                 CONFIDENCE_THRESHOLD
         ) {
@@ -1018,7 +1098,7 @@ function updateStableGesture(
 
 
     // --------------------------------------------------------
-    // HOLD TIME
+    // HOW LONG HAS THE GESTURE BEEN HELD?
     // --------------------------------------------------------
 
     const heldTime =
@@ -1027,7 +1107,7 @@ function updateStableGesture(
 
 
     // --------------------------------------------------------
-    // ACCEPT
+    // ACCEPT AFTER 0.3 SECONDS
     // --------------------------------------------------------
 
     if (
@@ -1037,6 +1117,7 @@ function updateStableGesture(
             HOLD_TIME
     ) {
 
+        // Don't add the same gesture repeatedly
         if (
             insertedGesture !==
             gesture
@@ -1045,6 +1126,7 @@ function updateStableGesture(
             addGestureToSentence(
                 gesture
             );
+
 
             insertedGesture =
                 gesture;
@@ -1058,13 +1140,7 @@ function updateStableGesture(
         statusText.textContent =
             `${gesture} added`;
 
-    }
-
-    // --------------------------------------------------------
-    // STILL HOLDING
-    // --------------------------------------------------------
-
-    else {
+    } else {
 
         const remaining =
             Math.max(
@@ -1090,6 +1166,8 @@ function resetGestureTracking() {
     candidateStartTime = 0;
 
     stableFrameCount = 0;
+
+    currentGesture = null;
 }
 
 
@@ -1140,6 +1218,7 @@ function addGestureToSentence(
     }
 
 
+    // Add a space automatically between words
     if (
         sentence.length > 0 &&
         !sentence.endsWith(" ")
@@ -1202,8 +1281,7 @@ addWordBtn.addEventListener(
             );
 
 
-            // Prevent immediate
-            // automatic duplicate
+            // Prevent immediate duplicate
             insertedGesture =
                 gesture;
 
@@ -1250,7 +1328,7 @@ speakBtn.addEventListener(
 
 
 // ============================================================
-// BROWSER TEXT-TO-SPEECH
+// BROWSER TEXT TO SPEECH
 // ============================================================
 
 function speakSentence() {
@@ -1279,7 +1357,7 @@ function speakSentence() {
     }
 
 
-    // Stop previous speech
+    // Stop any existing speech
     window.speechSynthesis.cancel();
 
 
@@ -1392,11 +1470,9 @@ finishBtn.addEventListener(
     "click",
     () => {
 
-        const text =
-            sentence.trim();
-
-
-        if (!text) {
+        if (
+            !sentence.trim()
+        ) {
 
             statusText.textContent =
                 "Sentence is empty.";
@@ -1415,7 +1491,7 @@ finishBtn.addEventListener(
 
 
 // ============================================================
-// BUTTON EVENTS
+// CAMERA BUTTONS
 // ============================================================
 
 startBtn.addEventListener(
@@ -1455,7 +1531,7 @@ statusText.textContent =
 
 
 // ============================================================
-// LOAD MODEL
+// LOAD MEDIAPIPE
 // ============================================================
 
 loadHandLandmarker();
