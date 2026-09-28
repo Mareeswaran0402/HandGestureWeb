@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Dashboard - Hand Gesture to Words</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+
+            min-height: 100vh;
+
+            background: #07111f;
+
+            color: #ffffff;
+        }
+
+
+        /* ====================================================
+           TOP NAVIGATION
+        ==================================================== */
+
+        .navbar {
+            width: 100%;
+
+            background: #0e1d2e;
+
+            border-bottom: 1px solid #29435f;
+
+            padding: 16px 30px;
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+
+            gap: 20px;
+        }
+
+
+        .brand {
+            font-size: 21px;
+
+            font-weight: 800;
+
+            color: #ffffff;
+        }
+
+
+        .user-area {
+            display: flex;
+
+            align-items: center;
+
+            gap: 15px;
+        }
+
+
+        .user-name {
+            color: #aebfd2;
+
+            font-size: 14px;
+        }
+
+
+        .logout-btn {
+            text-decoration: none;
+
+            background: #c0392b;
+
+            color: white;
+
+            padding: 9px 16px;
+
+            border-radius: 8px;
+
+            font-size: 14px;
+
+            font-weight: 700;
+        }
+
+
+        .logout-btn:hover {
+            opacity: 0.9;
+        }
+
+
+        /* ====================================================
+           MAIN CONTAINER
+        ==================================================== */
+
+        .container {
+            width: min(1250px, 94%);
+
+            margin: 0 auto;
+
+            padding: 35px 0 50px;
+        }
+
+
+        /* ====================================================
+           WELCOME
+        ==================================================== */
+
+        .welcome {
+            margin-bottom: 30px;
+        }
+
+
+        .welcome h1 {
+            font-size: 34px;
+
+            margin-bottom: 8px;
+        }
+
+
+        .welcome p {
+            color: #91a8bf;
+
+            font-size: 15px;
+        }
+
+
+        /* ====================================================
+           FLASH MESSAGE
+        ==================================================== */
+
+        .message {
+            padding: 13px 16px;
+
+            border-radius: 8px;
+
+            margin-bottom: 20px;
+
+            font-size: 14px;
+        }
+
+
+        .message.success {
+            background: #183c2c;
+
+            border: 1px solid #2d7856;
+
+            color: #a8f0c8;
+        }
+
+
+        .message.error {
+            background: #421f24;
+
+            border: 1px solid #7d3942;
+
+            color: #ffb7be;
+        }
+
+
+        /* ====================================================
+           STAT CARDS
+        ==================================================== */
+
+        .stats {
+            display: grid;
+
+            grid-template-columns:
+                repeat(3, 1fr);
+
+            gap: 18px;
+
+            margin-bottom: 30px;
+        }
+
+
+        .stat-card {
+            background: #0e1d2e;
+
+            border: 1px solid #29435f;
+
+            border-radius: 14px;
+
+            padding: 22px;
+        }
+
+
+        .stat-title {
+            color: #8fa6bd;
+
+            font-size: 14px;
+
+            margin-bottom: 10px;
+        }
+
+
+        .stat-number {
+            font-size: 34px;
+
+            font-weight: 800;
+
+            color: #ffffff;
+        }
+
+
+        /* ====================================================
+           ACTIONS
+        ==================================================== */
+
+        .actions {
+            display: flex;
+
+            flex-wrap: wrap;
+
+            gap: 12px;
+
+            margin-bottom: 30px;
+        }
+
+
+        .action-btn {
+            text-decoration: none;
+
+            display: inline-block;
+
+            padding: 12px 20px;
+
+            border-radius: 9px;
+
+            font-weight: 700;
+
+            font-size: 14px;
+
+            background: #2f80ed;
+
+            color: white;
+        }
+
+
+        .action-btn.secondary {
+            background: #34495e;
+        }
+
+
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+
+
+        /* ====================================================
+           GENERAL CARD
+        ==================================================== */
+
+        .card {
+            background: #0e1d2e;
+
+            border: 1px solid #29435f;
+
+            border-radius: 14px;
+
+            padding: 24px;
+
+            margin-bottom: 25px;
+        }
+
+
+        .card-header {
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: center;
+
+            gap: 15px;
+
+            margin-bottom: 18px;
+        }
+
+
+        .card-header h2 {
+            font-size: 21px;
+        }
+
+
+        .clear-btn {
+            border: none;
+
+            background: #6c3a3a;
+
+            color: white;
+
+            padding: 8px 13px;
+
+            border-radius: 7px;
+
+            font-size: 12px;
+
+            cursor: pointer;
+        }
+
+
+        .clear-btn:hover {
+            opacity: 0.9;
+        }
+
+
+        /* ====================================================
+           ACTIVITY TABLE
+        ==================================================== */
+
+        .table-wrapper {
+            width: 100%;
+
+            overflow-x: auto;
+        }
+
+
+        table {
+            width: 100%;
+
+            border-collapse: collapse;
+
+            min-width: 650px;
+        }
+
+
+        th {
+            text-align: left;
+
+            padding: 12px;
+
+            background: #13263b;
+
+            color: #9eb3ca;
+
+            font-size: 13px;
+        }
+
+
+        td {
+            padding: 13px 12px;
+
+            border-bottom: 1px solid #21384f;
+
+            color: #d8e4f1;
+
+            font-size: 13px;
+
+            vertical-align: middle;
+        }
+
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+
+        .type-badge {
+            display: inline-block;
+
+            padding: 5px 9px;
+
+            border-radius: 6px;
+
+            background: #243c56;
+
+            color: #cfe0f2;
+
+            font-size: 11px;
+
+            font-weight: 700;
+
+            text-transform: uppercase;
+        }
+
+
+        .value-text {
+            font-weight: 700;
+
+            color: #ffffff;
+        }
+
+
+        .confidence {
+            color: #74e2a5;
+
+            font-weight: 700;
+        }
+
+
+        .delete-btn {
+            border: none;
+
+            background: #51252a;
+
+            color: #ffb7be;
+
+            padding: 6px 10px;
+
+            border-radius: 6px;
+
+            cursor: pointer;
+
+            font-size: 11px;
+        }
+
+
+        .delete-btn:hover {
+            opacity: 0.9;
+        }
+
+
+        /* ====================================================
+           EMPTY STATE
+        ==================================================== */
+
+        .empty {
+            text-align: center;
+
+            padding: 30px 15px;
+
+            color: #758da5;
+
+            font-size: 14px;
+        }
+
+
+        /* ====================================================
+           SENTENCE HISTORY
+        ==================================================== */
+
+        .sentence-item {
+            background: #071523;
+
+            border: 1px solid #21384f;
+
+            border-radius: 10px;
+
+            padding: 16px;
+
+            margin-bottom: 10px;
+
+            display: flex;
+
+            justify-content: space-between;
+
+            align-items: flex-start;
+
+            gap: 15px;
+        }
+
+
+        .sentence-content {
+            flex: 1;
+        }
+
+
+        .sentence-text {
+            color: #ffffff;
+
+            font-size: 15px;
+
+            line-height: 1.5;
+
+            word-break: break-word;
+
+            margin-bottom: 7px;
+        }
+
+
+        .sentence-date {
+            color: #6f849a;
+
+            font-size: 12px;
+        }
+
+
+        /* ====================================================
+           PROFILE CARD
+        ==================================================== */
+
+        .profile-info {
+            display: grid;
+
+            grid-template-columns:
+                repeat(2, 1fr);
+
+            gap: 15px;
+        }
+
+
+        .profile-item {
+            background: #071523;
+
+            border: 1px solid #21384f;
+
+            border-radius: 9px;
+
+            padding: 15px;
+        }
+
+
+        .profile-label {
+            color: #7189a1;
+
+            font-size: 12px;
+
+            margin-bottom: 6px;
+        }
+
+
+        .profile-value {
+            color: #ffffff;
+
+            font-size: 14px;
+
+            font-weight: 700;
+
+            word-break: break-word;
+        }
+
+
+        /* ====================================================
+           FOOTER
+        ==================================================== */
+
+        footer {
+            text-align: center;
+
+            color: #657b92;
+
+            font-size: 12px;
+
+            margin-top: 35px;
+        }
+
+
+        /* ====================================================
+           MOBILE
+        ==================================================== */
+
+        @media (max-width: 800px) {
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+
+            .profile-info {
+                grid-template-columns: 1fr;
+            }
+
+
+            .navbar {
+                padding: 14px 16px;
+            }
+
+
+            .container {
+                width: 94%;
+
+                padding-top: 25px;
+            }
+
+
+            .welcome h1 {
+                font-size: 28px;
+            }
+
+
+            .actions {
+                flex-direction: column;
+            }
+
+
+            .action-btn {
+                text-align: center;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <!-- =====================================================
+         NAVBAR
+    ====================================================== -->
+
+    <nav class="navbar">
+
+        <div class="brand">
+            ✋ Hand Gesture
+        </div>
+
+
+        <div class="user-area">
+
+            <div class="user-name">
+
+                {{ user_name }}
+
+            </div>
+
+
+            <a
+                href="{{ url_for('logout') }}"
+                class="logout-btn"
+            >
+                Logout
+            </a>
+
+        </div>
+
+    </nav>
+
+
+    <!-- =====================================================
+         MAIN
+    ====================================================== -->
+
+    <main class="container">
+
+
+        <!-- WELCOME -->
+
+        <div class="welcome">
+
+            <h1>
+                Welcome, {{ user_name }}!
+            </h1>
+
+            <p>
+                Manage your gesture recognition activity and history.
+            </p>
+
+        </div>
+
+
+        <!-- FLASH MESSAGES -->
+
+        {% with messages = get_flashed_messages(
+            with_categories=true
+        ) %}
+
+            {% if messages %}
+
+                {% for category, message in messages %}
+
+                    <div class="message {{ category }}">
+                        {{ message }}
+                    </div>
+
+                {% endfor %}
+
+            {% endif %}
+
+        {% endwith %}
+
+
+        <!-- =================================================
+             STATISTICS
+        ================================================== -->
+
+        <div class="stats">
+
+
+            <div class="stat-card">
+
+                <div class="stat-title">
+                    Total Gestures
+                </div>
+
+                <div class="stat-number">
+                    {{ gesture_count }}
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-title">
+                    Total Sentences
+                </div>
+
+                <div class="stat-number">
+                    {{ sentence_count }}
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <div class="stat-title">
+                    Total Activities
+                </div>
+
+                <div class="stat-number">
+                    {{ activity_count }}
+                </div>
+
+            </div>
+
+
+        </div>
+
+
+        <!-- =================================================
+             ACTION BUTTONS
+        ================================================== -->
+
+        <div class="actions">
+
+            <a
+                href="{{ url_for('recognizer') }}"
+                class="action-btn"
+            >
+                Open Gesture Recognizer
+            </a>
+
+
+            <button
+                class="action-btn secondary"
+                onclick="clearAllHistory()"
+            >
+                Clear All History
+            </button>
+
+        </div>
+
+
+        <!-- =================================================
+             RECENT ACTIVITY
+        ================================================== -->
+
+        <section class="card">
+
+
+            <div class="card-header">
+
+                <h2>
+                    Recent Activity
+                </h2>
+
+            </div>
+
+
+            {% if recent_activity %}
+
+                <div class="table-wrapper">
+
+                    <table>
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    Type
+                                </th>
+
+                                <th>
+                                    Value
+                                </th>
+
+                                <th>
+                                    Confidence
+                                </th>
+
+                                <th>
+                                    Date
+                                </th>
+
+                                <th>
+                                    Action
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+                            {% for activity in recent_activity %}
+
+                                <tr id="activity-{{ activity.id }}">
+
+                                    <td>
+
+                                        <span class="type-badge">
+                                            {{ activity.activity_type }}
+                                        </span>
+
+                                    </td>
+
+
+                                    <td class="value-text">
+
+                                        {{ activity.value }}
+
+                                    </td>
+
+
+                                    <td>
+
+                                        {% if activity.confidence is not none %}
+
+                                            <span class="confidence">
+                                                {{ "%.1f"|format(activity.confidence) }}%
+                                            </span>
+
+                                        {% else %}
+
+                                            —
+
+                                        {% endif %}
+
+                                    </td>
+
+
+                                    <td>
+
+                                        {{ activity.created_at }}
+
+                                    </td>
+
+
+                                    <td>
+
+                                        <button
+                                            class="delete-btn"
+                                            onclick="deleteHistory({{ activity.id }})"
+                                        >
+                                            Delete
+                                        </button>
+
+                                    </td>
+
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            {% else %}
+
+                <div class="empty">
+                    No activity yet.
+                </div>
+
+            {% endif %}
+
+
+        </section>
+
+
+        <!-- =================================================
+             GESTURE HISTORY
+        ================================================== -->
+
+        <section class="card">
+
+
+            <div class="card-header">
+
+                <h2>
+                    Gesture History
+                </h2>
+
+
+                <button
+                    class="clear-btn"
+                    onclick="clearHistoryType('gesture')"
+                >
+                    Clear Gestures
+                </button>
+
+            </div>
+
+
+            {% if gesture_history %}
+
+                <div class="table-wrapper">
+
+                    <table>
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    Gesture
+                                </th>
+
+                                <th>
+                                    Confidence
+                                </th>
+
+                                <th>
+                                    Date
+                                </th>
+
+                                <th>
+                                    Action
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+                            {% for item in gesture_history %}
+
+                                <tr id="gesture-{{ item.id }}">
+
+                                    <td class="value-text">
+
+                                        {{ item.value }}
+
+                                    </td>
+
+
+                                    <td>
+
+                                        {% if item.confidence is not none %}
+
+                                            <span class="confidence">
+                                                {{ "%.1f"|format(item.confidence) }}%
+                                            </span>
+
+                                        {% else %}
+
+                                            —
+
+                                        {% endif %}
+
+                                    </td>
+
+
+                                    <td>
+
+                                        {{ item.created_at }}
+
+                                    </td>
+
+
+                                    <td>
+
+                                        <button
+                                            class="delete-btn"
+                                            onclick="deleteHistory({{ item.id }})"
+                                        >
+                                            Delete
+                                        </button>
+
+                                    </td>
+
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            {% else %}
+
+                <div class="empty">
+                    No gesture history yet.
+                </div>
+
+            {% endif %}
+
+
+        </section>
+
+
+        <!-- =================================================
+             SENTENCE HISTORY
+        ================================================== -->
+
+        <section class="card">
+
+
+            <div class="card-header">
+
+                <h2>
+                    Sentence History
+                </h2>
+
+
+                <button
+                    class="clear-btn"
+                    onclick="clearHistoryType('sentence')"
+                >
+                    Clear Sentences
+                </button>
+
+            </div>
+
+
+            {% if sentence_history %}
+
+                {% for item in sentence_history %}
+
+                    <div
+                        class="sentence-item"
+                        id="sentence-{{ item.id }}"
+                    >
+
+                        <div class="sentence-content">
+
+                            <div class="sentence-text">
+                                {{ item.value }}
+                            </div>
+
+                            <div class="sentence-date">
+                                {{ item.created_at }}
+                            </div>
+
+                        </div>
+
+
+                        <button
+                            class="delete-btn"
+                            onclick="deleteHistory({{ item.id }})"
+                        >
+                            Delete
+                        </button>
+
+                    </div>
+
+                {% endfor %}
+
+            {% else %}
+
+                <div class="empty">
+                    No sentence history yet.
+                </div>
+
+            {% endif %}
+
+
+        </section>
+
+
+        <!-- =================================================
+             PROFILE
+        ================================================== -->
+
+        <section class="card">
+
+            <div class="card-header">
+
+                <h2>
+                    Profile
+                </h2>
+
+            </div>
+
+
+            <div class="profile-info">
+
+
+                <div class="profile-item">
+
+                    <div class="profile-label">
+                        Name
+                    </div>
+
+                    <div class="profile-value">
+                        {{ user_name }}
+                    </div>
+
+                </div>
+
+
+                <div class="profile-item">
+
+                    <div class="profile-label">
+                        Email
+                    </div>
+
+                    <div class="profile-value">
+                        {{ user_email }}
+                    </div>
+
+                </div>
+
+
+            </div>
+
+        </section>
+
+
+        <footer>
+
+            Hand Gesture Recognition System
+
+        </footer>
+
+
+    </main>
+
+
+    <!-- =====================================================
+         JAVASCRIPT
+    ====================================================== -->
+
+    <script>
+
+        // ====================================================
+        // DELETE ONE HISTORY ITEM
+        // ====================================================
+
+        async function deleteHistory(id) {
+
+            const confirmed =
+                confirm(
+                    "Delete this history item?"
+                );
+
+
+            if (!confirmed) {
+                return;
+            }
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        `/api/history/${id}`,
+                        {
+                            method: "DELETE"
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (!data.success) {
+
+                    alert(
+                        data.error ||
+                        "Could not delete item."
+                    );
+
+                    return;
+                }
+
+
+                // Remove the item from the page
+                const elements = [
+                    document.getElementById(
+                        `activity-${id}`
+                    ),
+
+                    document.getElementById(
+                        `gesture-${id}`
+                    ),
+
+                    document.getElementById(
+                        `sentence-${id}`
+                    )
+                ];
+
+
+                elements.forEach(
+                    element => {
+
+                        if (element) {
+
+                            element.remove();
+
+                        }
+
+                    }
+                );
+
+
+            } catch (error) {
+
+                console.error(
+                    error
+                );
+
+
+                alert(
+                    "An error occurred while deleting."
+                );
+            }
+        }
+
+
+        // ====================================================
+        // CLEAR ONE TYPE
+        // ====================================================
+
+        async function clearHistoryType(type) {
+
+            const confirmed =
+                confirm(
+                    `Clear all ${type} history?`
+                );
+
+
+            if (!confirmed) {
+                return;
+            }
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api/history/clear",
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body: JSON.stringify({
+                                type: type
+                            })
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (!data.success) {
+
+                    alert(
+                        data.error ||
+                        "Could not clear history."
+                    );
+
+                    return;
+                }
+
+
+                // Reload dashboard
+                window.location.reload();
+
+
+            } catch (error) {
+
+                console.error(
+                    error
+                );
+
+
+                alert(
+                    "An error occurred."
+                );
+            }
+        }
+
+
+        // ====================================================
+        // CLEAR ALL HISTORY
+        // ====================================================
+
+        async function clearAllHistory() {
+
+            const confirmed =
+                confirm(
+                    "Are you sure you want to delete ALL history?"
+                );
+
+
+            if (!confirmed) {
+                return;
+            }
+
+
+            try {
+
+                const response =
+                    await fetch(
+                        "/api/history/clear",
+                        {
+                            method: "POST",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/json"
+                            },
+
+                            body: JSON.stringify({
+                                type: "all"
+                            })
+                        }
+                    );
+
+
+                const data =
+                    await response.json();
+
+
+                if (!data.success) {
+
+                    alert(
+                        data.error ||
+                        "Could not clear history."
+                    );
+
+                    return;
+                }
+
+
+                window.location.reload();
+
+
+            } catch (error) {
+
+                console.error(
+                    error
+                );
+
+
+                alert(
+                    "An error occurred."
+                );
+            }
+        }
+
+    </script>
+
+
+</body>
+
+</html>

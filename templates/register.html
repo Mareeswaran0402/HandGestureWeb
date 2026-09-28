@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Create Account - Hand Gesture to Words</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+
+            min-height: 100vh;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #07111f,
+                    #10243a
+                );
+
+            color: white;
+
+            padding: 20px;
+        }
+
+        .register-container {
+            width: 100%;
+            max-width: 460px;
+
+            background: #0e1d2e;
+
+            border: 1px solid #29435f;
+
+            border-radius: 18px;
+
+            padding: 35px;
+
+            box-shadow:
+                0 20px 50px
+                rgba(0, 0, 0, 0.35);
+        }
+
+        .logo {
+            text-align: center;
+
+            margin-bottom: 25px;
+        }
+
+        .logo-icon {
+            width: 70px;
+            height: 70px;
+
+            margin: 0 auto 15px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 50%;
+
+            background: #16a085;
+
+            font-size: 32px;
+        }
+
+        h1 {
+            text-align: center;
+
+            font-size: 29px;
+
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            text-align: center;
+
+            color: #9eb3ca;
+
+            font-size: 14px;
+
+            margin-bottom: 28px;
+        }
+
+        .message {
+            padding: 12px 14px;
+
+            border-radius: 8px;
+
+            margin-bottom: 18px;
+
+            font-size: 14px;
+        }
+
+        .message.error {
+            background: #421f24;
+
+            border: 1px solid #7d3942;
+
+            color: #ffb7be;
+        }
+
+        .message.success {
+            background: #183c2c;
+
+            border: 1px solid #2d7856;
+
+            color: #a8f0c8;
+        }
+
+        .form-group {
+            margin-bottom: 17px;
+        }
+
+        label {
+            display: block;
+
+            margin-bottom: 8px;
+
+            color: #d8e4f1;
+
+            font-weight: 600;
+
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+
+            padding: 13px 14px;
+
+            border-radius: 9px;
+
+            border: 1px solid #36526d;
+
+            background: #071523;
+
+            color: white;
+
+            font-size: 15px;
+
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #16a085;
+
+            box-shadow:
+                0 0 0 3px
+                rgba(22, 160, 133, 0.15);
+        }
+
+        .password-help {
+            color: #7f97ae;
+
+            font-size: 12px;
+
+            margin-top: 6px;
+        }
+
+        .register-btn {
+            width: 100%;
+
+            padding: 14px;
+
+            border: none;
+
+            border-radius: 9px;
+
+            background: #16a085;
+
+            color: white;
+
+            font-size: 16px;
+
+            font-weight: 700;
+
+            cursor: pointer;
+
+            margin-top: 5px;
+        }
+
+        .register-btn:hover {
+            opacity: 0.9;
+        }
+
+        .login-link {
+            text-align: center;
+
+            margin-top: 22px;
+
+            color: #9eb3ca;
+
+            font-size: 14px;
+        }
+
+        .login-link a {
+            color: #5ba3ff;
+
+            text-decoration: none;
+
+            font-weight: 700;
+        }
+
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+
+        .footer {
+            text-align: center;
+
+            color: #6f849a;
+
+            font-size: 12px;
+
+            margin-top: 25px;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+    <div class="register-container">
+
+        <div class="logo">
+
+            <div class="logo-icon">
+                ✋
+            </div>
+
+            <h1>
+                Create Account
+            </h1>
+
+            <div class="subtitle">
+                Register to use Hand Gesture Recognition
+            </div>
+
+        </div>
+
+
+        <!-- Flask flash messages -->
+
+        {% with messages = get_flashed_messages(
+            with_categories=true
+        ) %}
+
+            {% if messages %}
+
+                {% for category, message in messages %}
+
+                    <div class="message {{ category }}">
+                        {{ message }}
+                    </div>
+
+                {% endfor %}
+
+            {% endif %}
+
+        {% endwith %}
+
+
+        <!-- Registration Form -->
+
+        <form method="POST"
+              action="{{ url_for('register') }}">
+
+            <div class="form-group">
+
+                <label for="name">
+                    Full Name
+                </label>
+
+                <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    placeholder="Enter your name"
+                    required
+                    autocomplete="name"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label for="email">
+                    Email
+                </label>
+
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="Enter your email"
+                    required
+                    autocomplete="email"
+                >
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label for="password">
+                    Password
+                </label>
+
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Create a password"
+                    minlength="8"
+                    required
+                    autocomplete="new-password"
+                >
+
+                <div class="password-help">
+                    Password must contain at least 8 characters.
+                </div>
+
+            </div>
+
+
+            <div class="form-group">
+
+                <label for="confirm_password">
+                    Confirm Password
+                </label>
+
+                <input
+                    type="password"
+                    id="confirm_password"
+                    name="confirm_password"
+                    placeholder="Enter your password again"
+                    minlength="8"
+                    required
+                    autocomplete="new-password"
+                >
+
+            </div>
+
+
+            <button
+                type="submit"
+                class="register-btn"
+            >
+                Create Account
+            </button>
+
+        </form>
+
+
+        <div class="login-link">
+
+            Already have an account?
+
+            <a href="{{ url_for('login') }}">
+                Login
+            </a>
+
+        </div>
+
+
+        <div class="footer">
+
+            Hand Gesture Recognition System
+
+        </div>
+
+    </div>
+
+</body>
+
+</html>
