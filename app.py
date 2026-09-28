@@ -1,20 +1,35 @@
-from __future__ import annotations
-
-import base64
-from pathlib import Path
-
+from flask import Flask, render_template, request, jsonify
 import cv2
-import joblib
 import mediapipe as mp
+import joblib
 import numpy as np
-from flask import Flask, jsonify, render_template, request
+import base64
+import os
+import threading
 
 
-BASE_DIR = Path(__file__).resolve().parent
-MODEL_FILE = BASE_DIR / "gesture_model.pkl"
-HAND_MODEL_FILE = BASE_DIR / "hand_landmarker.task"
+# =========================================================
+# FLASK APPLICATION
+# =========================================================
 
-# The web app intentionally supports only these classes.
+app = Flask(__name__)
+
+# Maximum request size: 5 MB
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+
+
+# =========================================================
+# FILE PATHS
+# =========================================================
+
+MODEL_FILE = "gesture_model.pkl"
+HAND_MODEL_FILE = "hand_landmarker.task"
+
+
+# =========================================================
+# SUPPORTED GESTURES
+# =========================================================
+
 GESTURES = [
     "HELLO",
     "STOP",
@@ -25,230 +40,875 @@ GESTURES = [
     "HELP",
     "THANKS",
     "COME",
-    "BYE",
+    "BYE"
 ]
 
-# Web-side decision threshold requested by the user.
-CONFIDENCE_THRESHOLD = 0.55
-MARGIN_THRESHOLD = 0.08
 
-app = Flask(__name__)
+# =========================================================
+# SETTINGS
+# =========================================================
+
+# Minimum confidence for accepting a gesture
+CONFIDENCE_THRESHOLD = 55.0
+
+# Minimum difference between top and second prediction
+MARGIN_THRESHOLD = 8.0
 
 
-# -----------------------------------------------------------------------------
-# LOAD MODEL
-# -----------------------------------------------------------------------------
-if not MODEL_FILE.exists():
-    raise FileNotFoundError(
-        f"Missing model file: {MODEL_FILE}. "
-        "Copy gesture_model.pkl into the web project folder."
+# =========================================================
+# LOAD RANDOM FOREST MODEL
+# =========================================================
+
+try:
+
+    model = joblib.load(
+        MODEL_FILE
     )
 
-if not HAND_MODEL_FILE.exists():
-    raise FileNotFoundError(
-        f"Missing MediaPipe model: {HAND_MODEL_FILE}. "
-        "Copy hand_landmarker.task into the web project folder."
+except Exception as e:
+
+    print()
+    print("=" * 60)
+    print("ERROR: COULD NOT LOAD MODEL")
+    print("=" * 60)
+    print()
+    print("File:", MODEL_FILE)
+    print("Error:", e)
+    print()
+
+    raise SystemExit(1)
+
+
+# =========================================================
+# DISPLAY MODEL INFORMATION
+# =========================================================
+
+print()
+print("=" * 60)
+print("GESTURE MODEL LOADED")
+print("=" * 60)
+print()
+print("Model classes:")
+
+for class_name in model.classes_:
+
+    print(
+        " -",
+        class_name
     )
 
-model = joblib.load(MODEL_FILE)
-model_classes = [str(c) for c in model.classes_]
+print()
 
-# Keep only the requested 10 gestures. If an old model still contains
-# UNKNOWN, it is ignored rather than exposed by the website.
-known_indices = [
-    model_classes.index(g)
-    for g in GESTURES
-    if g in model_classes
+
+# =========================================================
+# CHECK EXPECTED GESTURES
+# =========================================================
+
+model_class_names = [
+    str(class_name)
+    for class_name in model.classes_
 ]
-known_gestures = [
-    g for g in GESTURES
-    if g in model_classes
+
+
+missing_classes = [
+
+    gesture
+
+    for gesture in GESTURES
+
+    if gesture not in model_class_names
+
 ]
 
-if not known_gestures:
-    raise RuntimeError(
-        "The model does not contain any of the expected 10 gestures. "
-        "Retrain gesture_model.pkl with the 10-class train.py."
+
+if missing_classes:
+
+    print(
+        "WARNING: Missing gesture classes:"
     )
 
-print("Loaded gesture classes:")
-for g in known_gestures:
-    print(" -", g)
+    for gesture in missing_classes:
 
-if "UNKNOWN" in model_classes:
-    print("Note: UNKNOWN exists in the old model but is ignored by the web app.")
-
-
-# -----------------------------------------------------------------------------
-# MEDIAPIPE
-# -----------------------------------------------------------------------------
-BaseOptions = mp.tasks.BaseOptions
-HandLandmarker = mp.tasks.vision.HandLandmarker
-HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
-VisionRunningMode = mp.tasks.vision.RunningMode
-
-options = HandLandmarkerOptions(
-    base_options=BaseOptions(
-        model_asset_path=str(HAND_MODEL_FILE)
-    ),
-    running_mode=VisionRunningMode.IMAGE,
-    num_hands=1,
-    min_hand_detection_confidence=0.5,
-    min_hand_presence_confidence=0.5,
-    min_tracking_confidence=0.5,
-)
-
-landmarker = HandLandmarker.create_from_options(options)
-
-
-# -----------------------------------------------------------------------------
-# ROUTES
-# -----------------------------------------------------------------------------
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/predict", methods=["POST"])
-def predict():
-    try:
-        payload = request.get_json(silent=True) or {}
-        image_data = payload.get("image")
-
-        if not image_data:
-            return jsonify({
-                "success": False,
-                "error": "No image received.",
-            }), 400
-
-        if "," in image_data:
-            image_data = image_data.split(",", 1)[1]
-
-        image_bytes = base64.b64decode(image_data)
-        image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-        frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-
-        if frame is None:
-            return jsonify({
-                "success": False,
-                "error": "Could not decode the camera frame.",
-            }), 400
-
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        mp_image = mp.Image(
-            image_format=mp.ImageFormat.SRGB,
-            data=rgb_frame,
+        print(
+            " -",
+            gesture
         )
 
-        result = landmarker.detect(mp_image)
+    print()
+
+
+# =========================================================
+# MEDIAPIPE SETUP
+# =========================================================
+
+BaseOptions = (
+    mp.tasks.BaseOptions
+)
+
+HandLandmarker = (
+    mp.tasks.vision.HandLandmarker
+)
+
+HandLandmarkerOptions = (
+    mp.tasks.vision.HandLandmarkerOptions
+)
+
+VisionRunningMode = (
+    mp.tasks.vision.RunningMode
+)
+
+
+# =========================================================
+# LANDMARKER OPTIONS
+# =========================================================
+
+options = HandLandmarkerOptions(
+
+    base_options=BaseOptions(
+
+        model_asset_path=HAND_MODEL_FILE
+
+    ),
+
+    running_mode=(
+        VisionRunningMode.IMAGE
+    ),
+
+    num_hands=1,
+
+    min_hand_detection_confidence=0.5,
+
+    min_hand_presence_confidence=0.5,
+
+    min_tracking_confidence=0.5
+
+)
+
+
+# =========================================================
+# CREATE LANDMARKER
+# =========================================================
+
+try:
+
+    landmarker = (
+        HandLandmarker.create_from_options(
+            options
+        )
+    )
+
+except Exception as e:
+
+    print()
+    print("=" * 60)
+    print("ERROR: COULD NOT LOAD MEDIAPIPE MODEL")
+    print("=" * 60)
+    print()
+    print(
+        "Make sure this file exists:"
+    )
+    print(
+        HAND_MODEL_FILE
+    )
+    print()
+    print(
+        "Error:",
+        e
+    )
+    print()
+
+    raise SystemExit(1)
+
+
+# =========================================================
+# THREAD LOCK
+# =========================================================
+
+# Prevent multiple requests from using the same
+# MediaPipe landmarker simultaneously.
+
+landmarker_lock = threading.Lock()
+
+
+# =========================================================
+# HOME PAGE
+# =========================================================
+
+@app.route("/")
+def home():
+
+    return render_template(
+        "index.html"
+    )
+
+
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+
+@app.route("/health")
+def health():
+
+    return jsonify({
+
+        "status": "ok",
+
+        "model_loaded": True,
+
+        "mediapipe_loaded": True,
+
+        "gestures": GESTURES
+
+    })
+
+
+# =========================================================
+# PREDICT API
+# =========================================================
+
+@app.route(
+    "/predict",
+    methods=["POST"]
+)
+def predict():
+
+    try:
+
+        # =================================================
+        # GET JSON
+        # =================================================
+
+        data = request.get_json(
+            silent=True
+        )
+
+
+        if not data:
+
+            return jsonify({
+
+                "success": False,
+
+                "error": "No JSON data received"
+
+            }), 400
+
+
+        if "image" not in data:
+
+            return jsonify({
+
+                "success": False,
+
+                "error": "No image received"
+
+            }), 400
+
+
+        image_data = data["image"]
+
+
+        if not image_data:
+
+            return jsonify({
+
+                "success": False,
+
+                "error": "Image is empty"
+
+            }), 400
+
+
+        # =================================================
+        # REMOVE DATA URL PREFIX
+        # =================================================
+
+        if "," in image_data:
+
+            image_data = image_data.split(
+                ",",
+                1
+            )[1]
+
+
+        # =================================================
+        # DECODE BASE64
+        # =================================================
+
+        try:
+
+            image_bytes = base64.b64decode(
+                image_data,
+                validate=True
+            )
+
+        except Exception:
+
+            return jsonify({
+
+                "success": False,
+
+                "error": "Invalid Base64 image"
+
+            }), 400
+
+
+        # =================================================
+        # CONVERT TO NUMPY
+        # =================================================
+
+        image_array = np.frombuffer(
+
+            image_bytes,
+
+            dtype=np.uint8
+
+        )
+
+
+        # =================================================
+        # DECODE IMAGE
+        # =================================================
+
+        frame = cv2.imdecode(
+
+            image_array,
+
+            cv2.IMREAD_COLOR
+
+        )
+
+
+        if frame is None:
+
+            return jsonify({
+
+                "success": False,
+
+                "error": "Could not decode image"
+
+            }), 400
+
+
+        # =================================================
+        # BGR -> RGB
+        # =================================================
+
+        rgb_frame = cv2.cvtColor(
+
+            frame,
+
+            cv2.COLOR_BGR2RGB
+
+        )
+
+
+        # =================================================
+        # CREATE MEDIAPIPE IMAGE
+        # =================================================
+
+        mp_image = mp.Image(
+
+            image_format=(
+                mp.ImageFormat.SRGB
+            ),
+
+            data=rgb_frame
+
+        )
+
+
+        # =================================================
+        # MEDIAPIPE HAND DETECTION
+        # =================================================
+
+        with landmarker_lock:
+
+            result = landmarker.detect(
+                mp_image
+            )
+
+
+        # =================================================
+        # NO HAND
+        # =================================================
 
         if not result.hand_landmarks:
+
             return jsonify({
+
                 "success": True,
+
                 "gesture": "NO HAND",
+
                 "confidence": 0.0,
+
                 "margin": 0.0,
-                "landmarks": [],
+
+                "landmarks": []
+
             })
+
+
+        # =================================================
+        # GET FIRST HAND
+        # =================================================
 
         hand = result.hand_landmarks[0]
 
+
+        # =================================================
+        # EXTRACT 63 FEATURES
+        # =================================================
+
         features = []
+
+
         for landmark in hand:
-            features.extend([
-                float(landmark.x),
-                float(landmark.y),
-                float(landmark.z),
-            ])
+
+            features.append(
+                float(landmark.x)
+            )
+
+            features.append(
+                float(landmark.y)
+            )
+
+            features.append(
+                float(landmark.z)
+            )
+
+
+        # =================================================
+        # VALIDATE FEATURE COUNT
+        # =================================================
 
         if len(features) != 63:
+
             return jsonify({
+
                 "success": False,
-                "error": "Expected 63 hand-landmark features.",
+
+                "error": (
+                    "Expected 63 hand features, "
+                    f"got {len(features)}"
+                )
+
             }), 500
 
-        features_np = np.asarray(
+
+        # =================================================
+        # NUMPY FEATURE ARRAY
+        # =================================================
+
+        features = np.array(
+
             features,
-            dtype=np.float32,
-        ).reshape(1, -1)
 
-        probabilities_all = model.predict_proba(features_np)[0]
+            dtype=np.float32
 
-        # Restrict the web application to the requested ten gestures.
-        known_probabilities = np.array(
-            [probabilities_all[i] for i in known_indices],
-            dtype=np.float32,
+        ).reshape(
+
+            1,
+            -1
+
         )
 
-        if known_probabilities.size == 0:
-            return jsonify({
-                "success": False,
-                "error": "No supported gestures are present in the model.",
-            }), 500
 
-        order = np.argsort(known_probabilities)[::-1]
-        best_position = int(order[0])
-        second_position = int(order[1]) if len(order) > 1 else best_position
+        # =================================================
+        # MODEL PROBABILITIES
+        # =================================================
 
-        prediction = known_gestures[best_position]
-        confidence = float(known_probabilities[best_position])
-        second_confidence = float(known_probabilities[second_position])
-        margin = confidence - second_confidence
+        probabilities = model.predict_proba(
 
-        # The model keeps the original probability scale. This means an old
-        # UNKNOWN class cannot be silently renormalized into a known gesture.
-        if confidence < CONFIDENCE_THRESHOLD or margin < MARGIN_THRESHOLD:
-            display_prediction = "UNCERTAIN"
-        else:
-            display_prediction = prediction
+            features
 
-        landmarks = [
-            {
-                "x": float(landmark.x),
-                "y": float(landmark.y),
-            }
-            for landmark in hand
+        )[0]
+
+
+        # =================================================
+        # REMOVE UNKNOWN FROM CONSIDERATION
+        # =================================================
+
+        # Even if an old model file still contains
+        # UNKNOWN, it will never be displayed.
+
+        valid_indices = [
+
+            index
+
+            for index, class_name
+            in enumerate(model_class_names)
+
+            if class_name in GESTURES
+
         ]
 
+
+        if not valid_indices:
+
+            return jsonify({
+
+                "success": False,
+
+                "error": (
+                    "Model does not contain any "
+                    "of the 10 supported gestures."
+                )
+
+            }), 500
+
+
+        # =================================================
+        # FILTER TO 10 SUPPORTED CLASSES
+        # =================================================
+
+        valid_probabilities = np.array(
+
+            [
+                probabilities[index]
+                for index in valid_indices
+            ],
+
+            dtype=np.float32
+
+        )
+
+
+        valid_class_names = [
+
+            model_class_names[index]
+
+            for index in valid_indices
+
+        ]
+
+
+        # =================================================
+        # RENORMALIZE
+        # =================================================
+
+        probability_sum = (
+            valid_probabilities.sum()
+        )
+
+
+        if probability_sum > 0:
+
+            valid_probabilities /= (
+                probability_sum
+            )
+
+
+        # =================================================
+        # SORT PREDICTIONS
+        # =================================================
+
+        sorted_indices = np.argsort(
+
+            valid_probabilities
+
+        )[::-1]
+
+
+        # =================================================
+        # TOP PREDICTION
+        # =================================================
+
+        best_position = int(
+
+            sorted_indices[0]
+
+        )
+
+
+        prediction = (
+
+            valid_class_names[
+                best_position
+            ]
+
+        )
+
+
+        best_probability = float(
+
+            valid_probabilities[
+                best_position
+            ]
+
+        )
+
+
+        # =================================================
+        # SECOND PREDICTION
+        # =================================================
+
+        if len(sorted_indices) > 1:
+
+            second_position = int(
+
+                sorted_indices[1]
+
+            )
+
+
+            second_probability = float(
+
+                valid_probabilities[
+                    second_position
+                ]
+
+            )
+
+        else:
+
+            second_probability = 0.0
+
+
+        # =================================================
+        # PERCENTAGES
+        # =================================================
+
+        confidence = (
+
+            best_probability * 100.0
+
+        )
+
+
+        second_confidence = (
+
+            second_probability * 100.0
+
+        )
+
+
+        # =================================================
+        # MARGIN
+        # =================================================
+
+        margin = (
+
+            confidence
+            - second_confidence
+
+        )
+
+
+        # =================================================
+        # CONFIDENCE CHECK
+        # =================================================
+
+        accepted = True
+
+
+        if confidence < CONFIDENCE_THRESHOLD:
+
+            accepted = False
+
+
+        # =================================================
+        # MARGIN CHECK
+        # =================================================
+
+        if margin < MARGIN_THRESHOLD:
+
+            accepted = False
+
+
+        # =================================================
+        # UNCERTAIN
+        # =================================================
+
+        if not accepted:
+
+            prediction = "UNCERTAIN"
+
+
+        # =================================================
+        # LANDMARK DATA FOR FRONTEND
+        # =================================================
+
+        landmarks = []
+
+
+        for landmark in hand:
+
+            landmarks.append({
+
+                "x": float(
+                    landmark.x
+                ),
+
+                "y": float(
+                    landmark.y
+                ),
+
+                "z": float(
+                    landmark.z
+                )
+
+            })
+
+
+        # =================================================
+        # RETURN RESULT
+        # =================================================
+
         return jsonify({
+
             "success": True,
-            "gesture": display_prediction,
-            "raw_gesture": prediction,
-            "confidence": round(confidence * 100.0, 2),
-            "margin": round(margin * 100.0, 2),
-            "landmarks": landmarks,
+
+            "gesture": prediction,
+
+            "confidence": round(
+                confidence,
+                2
+            ),
+
+            "margin": round(
+                margin,
+                2
+            ),
+
+            "accepted": accepted,
+
+            "landmarks": landmarks
+
         })
 
-    except (ValueError, TypeError, base64.binascii.Error) as exc:
+
+    # =====================================================
+    # BASE64 / REQUEST ERROR
+    # =====================================================
+
+    except Exception as e:
+
+        print()
+        print(
+            "Prediction error:",
+            e
+        )
+        print()
+
+
         return jsonify({
+
             "success": False,
-            "error": f"Invalid request: {exc}",
-        }), 400
-    except Exception as exc:
-        print("Prediction error:", exc)
-        return jsonify({
-            "success": False,
-            "error": str(exc),
+
+            "error": str(e)
+
         }), 500
 
 
-# -----------------------------------------------------------------------------
-# START
-# -----------------------------------------------------------------------------
+# =========================================================
+# 413 ERROR
+# =========================================================
+
+@app.errorhandler(413)
+def request_too_large(error):
+
+    return jsonify({
+
+        "success": False,
+
+        "error": "Image request is too large"
+
+    }), 413
+
+
+# =========================================================
+# SERVER SHUTDOWN
+# =========================================================
+
+@app.route(
+    "/shutdown",
+    methods=["POST"]
+)
+def shutdown():
+
+    return jsonify({
+
+        "success": False,
+
+        "error": "Shutdown disabled"
+
+    }), 403
+
+
+# =========================================================
+# START SERVER
+# =========================================================
+
 if __name__ == "__main__":
+
+    # -----------------------------------------------------
+    # PORT
+    # -----------------------------------------------------
+
+    port = int(
+
+        os.environ.get(
+            "PORT",
+            5000
+        )
+
+    )
+
+
+    print()
     print("=" * 60)
-    print("        HAND GESTURE TO WORD WEBSITE")
+    print("          HAND GESTURE TO WORDS")
     print("=" * 60)
-    print("Supported gestures:")
-    for gesture in GESTURES:
-        print(" -", gesture)
-    print("Confidence threshold: 55%")
-    print("Hold time: 0.3 seconds")
-    print("Open: http://127.0.0.1:5000")
     print()
 
+    print(
+        "Supported gestures:"
+    )
+
+    for gesture in GESTURES:
+
+        print(
+            " -",
+            gesture
+        )
+
+    print()
+
+    print(
+        f"Confidence threshold: "
+        f"{CONFIDENCE_THRESHOLD}%"
+    )
+
+    print(
+        f"Margin threshold: "
+        f"{MARGIN_THRESHOLD}%"
+    )
+
+    print(
+        f"Port: {port}"
+    )
+
+    print()
+
+    print(
+        "Starting Flask server..."
+    )
+
+    print()
+
+
+    # -----------------------------------------------------
+    # IMPORTANT FOR PUBLIC DEPLOYMENT
+    # -----------------------------------------------------
+
     app.run(
-        host="127.0.0.1",
-        port=5000,
-        debug=True,
+
+        host="0.0.0.0",
+
+        port=port,
+
+        debug=False
+
     )
